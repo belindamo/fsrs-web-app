@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FSRS — Spaced Repetition</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1 data-testid="app-title">FSRS</h1>
+      <p>Free Spaced Repetition Scheduler</p>
+    </header>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="view active">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-due" data-testid="stat-due">0</div>
+          <div class="stat-label">Due</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total" data-testid="stat-total">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-new" data-testid="stat-new">0</div>
+          <div class="stat-label">New</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-reviews-today" data-testid="stat-reviews-today">0</div>
+          <div class="stat-label">Today</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-streak" data-testid="stat-streak">0</div>
+          <div class="stat-label">Streak</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-mature" data-testid="stat-mature">0</div>
+          <div class="stat-label">Mature</div>
+        </div>
+      </div>
+      <button id="start-review-btn" class="btn btn-primary" data-testid="start-review-btn" disabled>
+        No cards due
+      </button>
+    </div>
+
+    <!-- Create -->
+    <div id="create" class="view">
+      <div class="create-mode-tabs" data-testid="create-mode-tabs">
+        <button class="create-tab selected" data-mode="single" data-testid="tab-single">Single</button>
+        <button class="create-tab" data-mode="bulk" data-testid="tab-bulk">Bulk</button>
+      </div>
+
+      <!-- Single card creation -->
+      <div id="create-single" data-testid="create-single">
+        <form id="create-form" data-testid="create-form">
+          <div class="form-group">
+            <label for="card-front">Front</label>
+            <textarea id="card-front" data-testid="card-front" placeholder="Question or prompt..." rows="3"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="card-back">Back</label>
+            <textarea id="card-back" data-testid="card-back" placeholder="Answer..." rows="3"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" data-testid="create-card-btn">Create Card</button>
+        </form>
+      </div>
+
+      <!-- Bulk card creation -->
+      <div id="create-bulk" class="hidden" data-testid="create-bulk">
+        <div class="form-group">
+          <label for="bulk-input">Paste cards — one per line, front and back separated by <code>::</code></label>
+          <textarea id="bulk-input" data-testid="bulk-input" placeholder="What is 2+2? :: 4&#10;Capital of France? :: Paris&#10;H2O stands for? :: Water" rows="10"></textarea>
+        </div>
+        <p id="bulk-preview" class="bulk-preview" data-testid="bulk-preview"></p>
+        <button id="bulk-create-btn" class="btn btn-primary" data-testid="bulk-create-btn" disabled>Create Cards</button>
+      </div>
+    </div>
+
+    <!-- Review -->
+    <div id="review" class="view">
+      <!-- Active review UI -->
+      <div id="review-active" data-testid="review-active">
+        <p id="review-progress" data-testid="review-progress"></p>
+        <div class="review-card" data-testid="review-card">
+          <div id="review-front" data-testid="review-front"></div>
+          <div id="review-back" class="hidden" data-testid="review-back"></div>
+        </div>
+        <button id="show-answer-btn" class="btn btn-secondary mb-16" data-testid="show-answer-btn">
+          Show Answer <span class="kbd-hint">[Space]</span>
+        </button>
+        <div id="rating-buttons" class="rating-buttons hidden" data-testid="rating-buttons">
+          <button class="rating-btn" data-rating="1" data-testid="rating-1">
+            Again <span class="kbd-hint">[1]</span>
+            <span class="interval-hint"></span>
+          </button>
+          <button class="rating-btn" data-rating="2" data-testid="rating-2">
+            Hard <span class="kbd-hint">[2]</span>
+            <span class="interval-hint"></span>
+          </button>
+          <button class="rating-btn" data-rating="3" data-testid="rating-3">
+            Good <span class="kbd-hint">[3]</span>
+            <span class="interval-hint"></span>
+          </button>
+          <button class="rating-btn" data-rating="4" data-testid="rating-4">
+            Easy <span class="kbd-hint">[4]</span>
+            <span class="interval-hint"></span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Session summary (shown after review completes) -->
+      <div id="review-summary" class="hidden" data-testid="review-summary">
+        <div class="summary-header">
+          <div class="summary-icon">✓</div>
+          <h2>Session Complete</h2>
+        </div>
+        <div class="summary-stats">
+          <div class="summary-stat">
+            <div class="summary-stat-value" id="summary-total" data-testid="summary-total">0</div>
+            <div class="summary-stat-label">Cards Reviewed</div>
+          </div>
+        </div>
+        <div class="summary-breakdown" data-testid="summary-breakdown">
+          <div class="summary-row" data-testid="summary-again">
+            <span class="summary-dot" style="background:#ef4444"></span>
+            <span class="summary-label">Again</span>
+            <span class="summary-count" id="summary-again-count">0</span>
+          </div>
+          <div class="summary-row" data-testid="summary-hard">
+            <span class="summary-dot" style="background:#f59e0b"></span>
+            <span class="summary-label">Hard</span>
+            <span class="summary-count" id="summary-hard-count">0</span>
+          </div>
+          <div class="summary-row" data-testid="summary-good">
+            <span class="summary-dot" style="background:#22c55e"></span>
+            <span class="summary-label">Good</span>
+            <span class="summary-count" id="summary-good-count">0</span>
+          </div>
+          <div class="summary-row" data-testid="summary-easy">
+            <span class="summary-dot" style="background:#3b82f6"></span>
+            <span class="summary-label">Easy</span>
+            <span class="summary-count" id="summary-easy-count">0</span>
+          </div>
+        </div>
+        <button id="summary-done-btn" class="btn btn-primary" data-testid="summary-done-btn">Back to Home</button>
+      </div>
+    </div>
+
+    <!-- Cards -->
+    <div id="cards" class="view">
+      <h2 class="section-title">All Cards</h2>
+      <div class="cards-toolbar">
+        <input type="text" id="card-search" data-testid="card-search" placeholder="Search cards..." autocomplete="off">
+        <div class="filter-pills" data-testid="filter-pills">
+          <button class="filter-pill selected" data-filter="all" data-testid="filter-all">All</button>
+          <button class="filter-pill" data-filter="due" data-testid="filter-due">Due</button>
+          <button class="filter-pill" data-filter="new" data-testid="filter-new">New</button>
+          <button class="filter-pill" data-filter="young" data-testid="filter-young">Young</button>
+          <button class="filter-pill" data-filter="mature" data-testid="filter-mature">Mature</button>
+        </div>
+      </div>
+      <p id="card-count" class="card-count" data-testid="card-count"></p>
+      <div id="card-list" data-testid="card-list"></div>
+    </div>
+
+    <!-- Stats -->
+    <div id="stats" class="view">
+      <h2 class="section-title">Statistics</h2>
+      <div class="stats-section">
+        <h3>Overview</h3>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-value" id="stats-total-reviews">0</div>
+            <div class="stat-label">Reviews</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stats-total-cards">0</div>
+            <div class="stat-label">Cards</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stats-young-cards">0</div>
+            <div class="stat-label">Young</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="stats-mature-cards">0</div>
+            <div class="stat-label">Mature</div>
+          </div>
+        </div>
+      </div>
+      <div class="stats-section">
+        <h3>Rating Distribution</h3>
+        <div id="rating-distribution" data-testid="rating-distribution"></div>
+      </div>
+      <div class="stats-section">
+        <h3>Reviews (Last 14 Days)</h3>
+        <div class="chart-container">
+          <canvas id="review-chart" data-testid="review-chart"></canvas>
+        </div>
+      </div>
+      <div class="data-buttons">
+        <button id="export-btn" class="btn btn-secondary" data-testid="export-btn">Export Data</button>
+        <button id="import-btn" class="btn btn-secondary" data-testid="import-btn">Import Data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="edit-modal" class="modal hidden" data-testid="edit-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2 class="section-title">Edit Card</h2>
+      <form id="edit-form" data-testid="edit-form">
+        <input type="hidden" id="edit-card-id">
+        <div class="form-group">
+          <label for="edit-front">Front</label>
+          <textarea id="edit-front" data-testid="edit-front" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="edit-back">Back</label>
+          <textarea id="edit-back" data-testid="edit-back" rows="3"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="edit-cancel-btn" class="btn btn-secondary" data-testid="edit-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" data-testid="edit-save">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" data-testid="toast"></div>
+
+  <!-- Navigation -->
+  <nav data-testid="nav">
+    <button data-view="dashboard" class="selected" data-testid="nav-dashboard">
+      <span class="nav-icon">📊</span>
+      Home
+    </button>
+    <button data-view="create" data-testid="nav-create">
+      <span class="nav-icon">➕</span>
+      Create
+    </button>
+    <button data-view="review" data-testid="nav-review">
+      <span class="nav-icon">🔄</span>
+      Review
+    </button>
+    <button data-view="cards" data-testid="nav-cards">
+      <span class="nav-icon">📚</span>
+      Cards
+    </button>
+    <button data-view="stats" data-testid="nav-stats">
+      <span class="nav-icon">📈</span>
+      Stats
+    </button>
+  </nav>
+
+  <script src="js/fsrs.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -10,6 +10,7 @@ const App = (() => {
   let cardFilterState = 'all';
   let createMode = 'single';
   let sessionRatings = []; // Track ratings for session summary
+  let expandedCardId = null; // Currently expanded card in card list
 
   // --- DOM helpers ---
 
@@ -296,23 +297,51 @@ const App = (() => {
 
     filtered.forEach(card => {
       const row = document.createElement('div');
-      row.className = 'card-row';
+      const isExpanded = expandedCardId === card.id;
+      row.className = 'card-row' + (isExpanded ? ' expanded' : '');
       row.setAttribute('data-testid', 'card-row');
+      row.setAttribute('data-card-id', card.id);
 
       const state = getCardState(card);
       const stateClass = state === 'new' ? 'badge-new' : state === 'mature' ? 'badge-mature' : 'badge-young';
       const stateLabel = state === 'new' ? 'New' : state === 'mature' ? 'Mature' : 'Young';
 
+      const chevron = isExpanded ? '▾' : '▸';
+
+      let detailHtml = '';
+      if (isExpanded) {
+        detailHtml = `
+          <div class="card-detail" data-testid="card-detail">
+            <div class="card-detail-answer">
+              <span class="card-detail-label">Answer</span>
+              <div class="card-detail-value" data-testid="card-detail-answer">${escapeHtml(card.back)}</div>
+            </div>
+            <div class="card-detail-meta">
+              <div class="detail-chip"><span class="detail-chip-label">Interval</span><span class="detail-chip-value">${card.state !== 'new' ? formatInterval(card.interval) : '—'}</span></div>
+              <div class="detail-chip"><span class="detail-chip-label">Reps</span><span class="detail-chip-value">${card.reps || 0}</span></div>
+              <div class="detail-chip"><span class="detail-chip-label">Lapses</span><span class="detail-chip-value">${card.lapses || 0}</span></div>
+              <div class="detail-chip"><span class="detail-chip-label">Stability</span><span class="detail-chip-value">${card.stability > 0 ? card.stability.toFixed(1) : '—'}</span></div>
+              <div class="detail-chip"><span class="detail-chip-label">Difficulty</span><span class="detail-chip-value">${card.difficulty > 0 ? card.difficulty.toFixed(1) : '—'}</span></div>
+              <div class="detail-chip"><span class="detail-chip-label">Next</span><span class="detail-chip-value">${card.state !== 'new' ? new Date(card.due).toLocaleDateString() : '—'}</span></div>
+            </div>
+          </div>
+        `;
+      }
+
       row.innerHTML = `
-        <div class="card-row-content">
-          <strong>${escapeHtml(card.front)}</strong>
-          <span class="badge ${stateClass}">${stateLabel}</span>
+        <div class="card-row-header" data-testid="card-row-header">
+          <span class="card-chevron">${chevron}</span>
+          <div class="card-row-content">
+            <strong>${escapeHtml(card.front)}</strong>
+            <span class="badge ${stateClass}">${stateLabel}</span>
+          </div>
+          <div class="card-row-meta">
+            ${card.state !== 'new' ? `${formatInterval(card.interval)}` : 'New'}
+          </div>
+          <button class="btn-icon edit-card-btn" data-id="${card.id}" data-testid="edit-card" aria-label="Edit card">✎</button>
+          <button class="btn-icon delete-card-btn" data-id="${card.id}" data-testid="delete-card" aria-label="Delete card">✕</button>
         </div>
-        <div class="card-row-meta">
-          ${card.state !== 'new' ? `Next: ${new Date(card.due).toLocaleDateString()} · Interval: ${formatInterval(card.interval)}` : 'Not yet reviewed'}
-        </div>
-        <button class="btn-icon edit-card-btn" data-id="${card.id}" data-testid="edit-card" aria-label="Edit card">✎</button>
-        <button class="btn-icon delete-card-btn" data-id="${card.id}" data-testid="delete-card" aria-label="Delete card">✕</button>
+        ${detailHtml}
       `;
       list.appendChild(row);
     });
@@ -489,6 +518,18 @@ const App = (() => {
       const editBtn = e.target.closest('.edit-card-btn');
       if (editBtn) {
         openEditModal(editBtn.dataset.id);
+        return;
+      }
+
+      // Expand/collapse card row
+      const header = e.target.closest('.card-row-header');
+      if (header) {
+        const row = header.closest('.card-row');
+        const cardId = row?.getAttribute('data-card-id');
+        if (cardId) {
+          expandedCardId = expandedCardId === cardId ? null : cardId;
+          renderCardList();
+        }
       }
     });
 

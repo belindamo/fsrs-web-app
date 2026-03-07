@@ -410,6 +410,98 @@ test.describe('FSRS Web App', () => {
     await expect(page.getByTestId('card-list')).toContainText('No cards match');
   });
 
+  // --- Expandable card row tests ---
+
+  test('can expand a card row to see the answer', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Expand test Q');
+    await page.getByTestId('card-back').fill('Expand test A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to cards
+    await page.getByTestId('nav-cards').click();
+    await expect(page.getByTestId('card-list')).toContainText('Expand test Q');
+
+    // Card detail should not be visible initially
+    await expect(page.getByTestId('card-detail')).toHaveCount(0);
+
+    // Click the card row header to expand
+    await page.getByTestId('card-row-header').click();
+
+    // Card detail should now be visible with the answer
+    await expect(page.getByTestId('card-detail')).toBeVisible();
+    await expect(page.getByTestId('card-detail-answer')).toHaveText('Expand test A');
+  });
+
+  test('can collapse an expanded card row', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Collapse test Q');
+    await page.getByTestId('card-back').fill('Collapse test A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to cards and expand
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+    await expect(page.getByTestId('card-detail')).toBeVisible();
+
+    // Click again to collapse
+    await page.getByTestId('card-row-header').click();
+    await expect(page.getByTestId('card-detail')).toHaveCount(0);
+  });
+
+  test('expanding one card collapses any previously expanded card', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Card One');
+    await page.getByTestId('card-back').fill('Answer One');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Card Two');
+    await page.getByTestId('card-back').fill('Answer Two');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to cards
+    await page.getByTestId('nav-cards').click();
+    const headers = page.getByTestId('card-row-header');
+
+    // Expand first card
+    await headers.nth(0).click();
+    await expect(page.getByTestId('card-detail')).toHaveCount(1);
+    await expect(page.getByTestId('card-detail-answer')).toHaveText('Answer One');
+
+    // Expand second card — first should collapse
+    await headers.nth(1).click();
+    await expect(page.getByTestId('card-detail')).toHaveCount(1);
+    await expect(page.getByTestId('card-detail-answer')).toHaveText('Answer Two');
+  });
+
+  test('expanded card shows metadata chips', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Meta test Q');
+    await page.getByTestId('card-back').fill('Meta test A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Expand it
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+
+    // Check metadata chips exist
+    const detail = page.getByTestId('card-detail');
+    await expect(detail).toBeVisible();
+    await expect(detail.locator('.detail-chip')).toHaveCount(6); // Interval, Reps, Lapses, Stability, Difficulty, Next
+  });
+
   // --- Bulk creation tests ---
 
   test('can switch between single and bulk create modes', async ({ page }) => {

@@ -382,6 +382,9 @@ const App = (() => {
 
     // Reviews per day (last 14 days)
     renderReviewChart(history);
+
+    // Forecast (next 14 days)
+    renderForecast();
   }
 
   function renderReviewChart(history) {
@@ -428,6 +431,71 @@ const App = (() => {
         ctx.fillStyle = '#e2e8f0';
         ctx.fillText(counts[i], x + barWidth / 2, y - 4);
       }
+    }
+  }
+
+  // --- Forecast ---
+
+  function renderForecast() {
+    const cards = Storage.getCards();
+    const barsEl = $('#forecast-bars');
+    const summaryEl = $('#forecast-summary');
+    if (!barsEl || !summaryEl) return;
+
+    const days = 14;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Count due cards per day for next 14 days
+    const counts = new Array(days).fill(0);
+    cards.forEach(card => {
+      const due = new Date(card.due);
+      const dueDay = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+      const diff = Math.floor((dueDay - todayStart) / (1000 * 60 * 60 * 24));
+      if (diff >= 0 && diff < days) {
+        counts[diff]++;
+      } else if (diff < 0) {
+        // Overdue cards count as today
+        counts[0]++;
+      }
+    });
+
+    const maxCount = Math.max(...counts, 1);
+    const totalUpcoming = counts.reduce((a, b) => a + b, 0);
+
+    barsEl.innerHTML = '';
+    const dayLabels = ['Today', 'Tom'];
+
+    for (let i = 0; i < days; i++) {
+      const date = new Date(todayStart);
+      date.setDate(date.getDate() + i);
+
+      let label;
+      if (i === 0) label = 'Today';
+      else if (i === 1) label = 'Tom';
+      else label = `${date.getMonth() + 1}/${date.getDate()}`;
+
+      const pct = (counts[i] / maxCount) * 100;
+      const intensity = counts[i] === 0 ? 'empty' : counts[i] <= 3 ? 'low' : counts[i] <= 8 ? 'med' : 'high';
+
+      const bar = document.createElement('div');
+      bar.className = 'forecast-bar-col';
+      bar.setAttribute('data-testid', 'forecast-bar');
+      bar.innerHTML = `
+        <div class="forecast-bar-count">${counts[i] || ''}</div>
+        <div class="forecast-bar-track">
+          <div class="forecast-bar-fill forecast-${intensity}" style="height:${Math.max(pct, counts[i] > 0 ? 4 : 0)}%"></div>
+        </div>
+        <div class="forecast-bar-label">${label}</div>
+      `;
+      barsEl.appendChild(bar);
+    }
+
+    if (totalUpcoming === 0) {
+      summaryEl.textContent = 'No reviews scheduled in the next 14 days.';
+    } else {
+      const avgPerDay = (totalUpcoming / days).toFixed(1);
+      summaryEl.textContent = `${totalUpcoming} review${totalUpcoming !== 1 ? 's' : ''} upcoming · ~${avgPerDay}/day avg`;
     }
   }
 

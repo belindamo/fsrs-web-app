@@ -511,6 +511,73 @@ textarea { min-height: 80px; }
   overflow: hidden;
 }
 
+/* === Forecast === */
+.forecast-bars {
+  display: flex;
+  gap: 4px;
+  align-items: flex-end;
+  height: 140px;
+  padding: 0 2px;
+}
+
+.forecast-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+}
+
+.forecast-bar-count {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  height: 16px;
+  line-height: 16px;
+  flex-shrink: 0;
+}
+
+.forecast-bar-track {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.forecast-bar-fill {
+  width: 100%;
+  max-width: 24px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s;
+  min-width: 6px;
+}
+
+.forecast-empty { background: transparent; }
+.forecast-low { background: #4338ca; }
+.forecast-med { background: #6366f1; }
+.forecast-high { background: #818cf8; }
+
+.forecast-bar-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+}
+
+.forecast-summary {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 12px;
+}
+
 /* === Section headers === */
 .section-title {
   font-size: 1.1rem;

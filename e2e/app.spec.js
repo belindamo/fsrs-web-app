@@ -670,6 +670,77 @@ test.describe('FSRS Web App', () => {
     await expect(page.locator('#summary-easy-count')).toHaveText('1');
   });
 
+  // --- Forecast tests ---
+
+  test('stats page shows forecast section', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    await expect(page.getByTestId('forecast-container')).toBeVisible();
+    await expect(page.getByTestId('forecast-bars')).toBeVisible();
+    await expect(page.getByTestId('forecast-summary')).toBeVisible();
+  });
+
+  test('forecast shows empty message when no cards exist', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    await expect(page.getByTestId('forecast-summary')).toHaveText('No reviews scheduled in the next 14 days.');
+  });
+
+  test('forecast shows bars for due cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Create cards (new cards are due immediately = today)
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Forecast Q1');
+    await page.getByTestId('card-back').fill('Forecast A1');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Forecast Q2');
+    await page.getByTestId('card-back').fill('Forecast A2');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to stats
+    await page.getByTestId('nav-stats').click();
+
+    // Should have 14 forecast bars
+    const bars = page.getByTestId('forecast-bar');
+    await expect(bars).toHaveCount(14);
+
+    // Summary should show upcoming reviews
+    await expect(page.getByTestId('forecast-summary')).toContainText('2 reviews upcoming');
+  });
+
+  test('forecast updates after reviewing cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Forecast review Q');
+    await page.getByTestId('card-back').fill('Forecast review A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Check forecast before review — card is due today
+    await page.getByTestId('nav-stats').click();
+    await expect(page.getByTestId('forecast-summary')).toContainText('1 review upcoming');
+
+    // Review the card
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Check forecast after review — card should be rescheduled
+    await page.getByTestId('nav-stats').click();
+    // The card's next due date depends on the algorithm, but it should still
+    // be in the forecast if within 14 days (FSRS Good on new card = ~3 days)
+    await expect(page.getByTestId('forecast-bars')).toBeVisible();
+    const bars = page.getByTestId('forecast-bar');
+    await expect(bars).toHaveCount(14);
+  });
+
   test('clicking "Back to Home" from summary returns to dashboard', async ({ page }) => {
     await page.goto('/');
 

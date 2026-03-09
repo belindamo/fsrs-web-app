@@ -83,7 +83,12 @@
     <div id="review" class="view">
       <!-- Active review UI -->
       <div id="review-active" data-testid="review-active">
-        <p id="review-progress" data-testid="review-progress"></p>
+        <div class="review-toolbar">
+          <p id="review-progress" data-testid="review-progress"></p>
+          <button id="undo-btn" class="btn-undo hidden" data-testid="undo-btn" aria-label="Undo last rating">
+            ↩ Undo <span class="kbd-hint">[Ctrl+Z]</span>
+          </button>
+        </div>
         <div class="review-card" data-testid="review-card">
           <div id="review-front" data-testid="review-front"></div>
           <div id="review-back" class="hidden" data-testid="review-back"></div>
@@ -145,6 +150,9 @@
             <span class="summary-count" id="summary-easy-count">0</span>
           </div>
         </div>
+        <button id="summary-undo-btn" class="btn btn-secondary mb-16 hidden" data-testid="summary-undo-btn">
+          ↩ Undo Last Rating
+        </button>
         <button id="summary-done-btn" class="btn btn-primary" data-testid="summary-done-btn">Back to Home</button>
       </div>
     </div>

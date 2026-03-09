@@ -765,4 +765,169 @@ test.describe('FSRS Web App', () => {
     await expect(page.locator('#dashboard')).toHaveClass(/active/);
     await expect(page.getByTestId('stat-due')).toHaveText('0');
   });
+
+  // --- Undo during review tests ---
+
+  test('undo button is hidden at start of review', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Undo hide test');
+    await page.getByTestId('card-back').fill('Answer');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Undo button should be hidden (no previous ratings to undo)
+    await expect(page.getByTestId('undo-btn')).toBeHidden();
+  });
+
+  test('undo button appears after rating a card', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Undo Q1');
+    await page.getByTestId('card-back').fill('Undo A1');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Undo Q2');
+    await page.getByTestId('card-back').fill('Undo A2');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review, rate first card
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Now on second card — undo button should be visible
+    await expect(page.getByTestId('undo-btn')).toBeVisible();
+  });
+
+  test('clicking undo restores previous card for re-rating', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Undo first Q');
+    await page.getByTestId('card-back').fill('Undo first A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Undo second Q');
+    await page.getByTestId('card-back').fill('Undo second A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review and rate the first card
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Should be on first card
+    await expect(page.getByTestId('review-front')).toHaveText('Undo first Q');
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-1').click(); // Rate as Again (oops)
+
+    // Now on second card
+    await expect(page.getByTestId('review-front')).toHaveText('Undo second Q');
+
+    // Click undo — should go back to first card
+    await page.getByTestId('undo-btn').click();
+    await expect(page.getByTestId('review-front')).toHaveText('Undo first Q');
+
+    // Should show toast
+    await expect(page.getByTestId('toast')).toHaveText('Rating undone');
+
+    // Progress should reflect the restored card
+    await expect(page.getByTestId('review-progress')).toContainText('2 cards remaining');
+  });
+
+  test('undo from session summary goes back to review', async ({ page }) => {
+    await page.goto('/');
+
+    // Create one card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Summary undo Q');
+    await page.getByTestId('card-back').fill('Summary undo A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review and rate the card
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-2').click(); // Rate as Hard
+
+    // Should be on summary screen
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+
+    // Summary should have an undo button
+    await expect(page.getByTestId('summary-undo-btn')).toBeVisible();
+
+    // Click undo — should go back to active review
+    await page.getByTestId('summary-undo-btn').click();
+    await expect(page.getByTestId('review-active')).toBeVisible();
+    await expect(page.getByTestId('review-summary')).toBeHidden();
+    await expect(page.getByTestId('review-front')).toHaveText('Summary undo Q');
+  });
+
+  test('can undo and re-rate with a different rating', async ({ page }) => {
+    await page.goto('/');
+
+    // Create one card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Re-rate Q');
+    await page.getByTestId('card-back').fill('Re-rate A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review and rate as Again
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-1').click();
+
+    // Undo from summary
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+    await page.getByTestId('summary-undo-btn').click();
+
+    // Re-rate as Easy
+    await expect(page.getByTestId('review-front')).toHaveText('Re-rate Q');
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-4').click();
+
+    // Summary should show 1 card reviewed with Easy rating
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+    await expect(page.getByTestId('summary-total')).toHaveText('1');
+    await expect(page.locator('#summary-again-count')).toHaveText('0');
+    await expect(page.locator('#summary-easy-count')).toHaveText('1');
+  });
+
+  test('undo via Ctrl+Z keyboard shortcut during review', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Ctrl-Z Q1');
+    await page.getByTestId('card-back').fill('Ctrl-Z A1');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Ctrl-Z Q2');
+    await page.getByTestId('card-back').fill('Ctrl-Z A2');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review, rate first card
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Now on second card — use Ctrl+Z to undo
+    await expect(page.getByTestId('review-front')).toHaveText('Ctrl-Z Q2');
+    await page.keyboard.press('Control+z');
+
+    // Should go back to first card
+    await expect(page.getByTestId('review-front')).toHaveText('Ctrl-Z Q1');
+    await expect(page.getByTestId('toast')).toHaveText('Rating undone');
+  });
 });

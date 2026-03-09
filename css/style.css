@@ -258,12 +258,44 @@ textarea { min-height: 80px; }
 .rating-btn[data-rating="4"] { background: #1e3a5f; color: #93c5fd; }
 .rating-btn[data-rating="4"]:hover { background: #1e40af; }
 
+/* === Review Toolbar === */
+.review-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 #review-progress {
   text-align: center;
   color: var(--text-muted);
   font-size: 0.85rem;
-  margin-bottom: 12px;
+  flex: 1;
 }
+
+.btn-undo {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-undo:hover {
+  border-color: var(--primary);
+  color: var(--text);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.btn-undo.hidden { display: none; }
 
 /* === Cards Toolbar === */
 .cards-toolbar {

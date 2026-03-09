@@ -89,6 +89,18 @@ const Storage = (() => {
     save(HISTORY_KEY, history);
   }
 
+  function removeLastReview(cardId) {
+    const history = getHistory();
+    // Find the last review for this card and remove it
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i].cardId === cardId) {
+        history.splice(i, 1);
+        break;
+      }
+    }
+    save(HISTORY_KEY, history);
+  }
+
   // --- Stats ---
 
   function getStats() {
@@ -138,7 +150,7 @@ const Storage = (() => {
 
   return {
     getCards, getCard, saveCard, deleteCard, createCard,
-    getDueCards, getHistory, addReview, getStats,
+    getDueCards, getHistory, addReview, removeLastReview, getStats,
     exportData, importData,
   };
 })();

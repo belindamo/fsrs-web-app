@@ -11,6 +11,7 @@ const App = (() => {
   let createMode = 'single';
   let sessionRatings = []; // Track ratings for session summary
   let expandedCardId = null; // Currently expanded card in card list
+  let undoStack = []; // Stack of {cardSnapshot, rating} for undo during review
 
   // --- DOM helpers ---
 
@@ -144,6 +145,7 @@ const App = (() => {
     reviewQueue = Storage.getDueCards();
     if (reviewQueue.length === 0) return;
     sessionRatings = [];
+    undoStack = [];
     // Show active review, hide summary
     $('#review-active').classList.remove('hidden');
     $('#review-summary').classList.add('hidden');
@@ -165,6 +167,16 @@ const App = (() => {
     $('#show-answer-btn').classList.remove('hidden');
     $('#rating-buttons').classList.add('hidden');
     $('#review-progress').textContent = `${reviewQueue.length} card${reviewQueue.length > 1 ? 's' : ''} remaining`;
+
+    // Show/hide undo button
+    const undoBtn = $('#undo-btn');
+    if (undoBtn) {
+      if (undoStack.length > 0) {
+        undoBtn.classList.remove('hidden');
+      } else {
+        undoBtn.classList.add('hidden');
+      }
+    }
 
     // Show preview intervals
     const preview = FSRS.previewRatings(currentCard);
@@ -188,6 +200,9 @@ const App = (() => {
   function handleRating(rating) {
     if (!currentCard) return;
 
+    // Save snapshot for undo before modifying anything
+    const cardSnapshot = { ...currentCard };
+
     const now = new Date();
     const elapsed = currentCard.lastReview
       ? (now - new Date(currentCard.lastReview)) / (1000 * 60 * 60 * 24)
@@ -199,8 +214,38 @@ const App = (() => {
     Storage.addReview(currentCard.id, rating, elapsed, updated.interval);
     sessionRatings.push(rating);
 
+    // Push to undo stack
+    undoStack.push({ cardSnapshot, rating });
+
     reviewQueue.shift();
     showNextCard();
+  }
+
+  function undoLastRating() {
+    if (undoStack.length === 0) return;
+
+    const last = undoStack.pop();
+
+    // Restore the card to its pre-review state
+    Storage.saveCard(last.cardSnapshot);
+
+    // Remove the last review log entry for this card
+    Storage.removeLastReview(last.cardSnapshot.id);
+
+    // Remove the last session rating
+    sessionRatings.pop();
+
+    // Put the card back at the front of the review queue
+    reviewQueue.unshift(last.cardSnapshot);
+
+    // If we were on the summary screen, go back to active review
+    if (!$('#review-summary').classList.contains('hidden')) {
+      $('#review-active').classList.remove('hidden');
+      $('#review-summary').classList.add('hidden');
+    }
+
+    showNextCard();
+    showToast('Rating undone');
   }
 
   function finishReview() {
@@ -226,6 +271,16 @@ const App = (() => {
     $('#summary-hard-count').textContent = counts[2];
     $('#summary-good-count').textContent = counts[3];
     $('#summary-easy-count').textContent = counts[4];
+
+    // Show/hide undo button on summary screen
+    const summaryUndo = $('#summary-undo-btn');
+    if (summaryUndo) {
+      if (undoStack.length > 0) {
+        summaryUndo.classList.remove('hidden');
+      } else {
+        summaryUndo.classList.add('hidden');
+      }
+    }
   }
 
   function dismissSummary() {
@@ -572,6 +627,10 @@ const App = (() => {
     });
     $('#summary-done-btn').addEventListener('click', dismissSummary);
 
+    // Undo
+    $('#undo-btn')?.addEventListener('click', undoLastRating);
+    $('#summary-undo-btn')?.addEventListener('click', undoLastRating);
+
     // Card list actions (delegated)
     $('#card-list').addEventListener('click', (e) => {
       const deleteBtn = e.target.closest('.delete-card-btn');
@@ -677,6 +736,13 @@ const App = (() => {
       if (currentView !== 'review') return;
       // Don't intercept when typing in inputs
       if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+      // Undo: Ctrl+Z / Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        undoLastRating();
+        return;
+      }
 
       if (!answerRevealed && (e.code === 'Space' || e.key === ' ')) {
         e.preventDefault();

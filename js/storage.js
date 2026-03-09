@@ -48,10 +48,12 @@ const Storage = (() => {
   }
 
   function createCard(front, back) {
+    const algorithm = Math.random() < 0.5 ? 'fsrs5' : 'betterfsrs';
     const card = {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
       front,
       back,
+      algorithm,
       stability: 0,
       difficulty: 0,
       lastReview: null,
@@ -61,6 +63,12 @@ const Storage = (() => {
       lapses: 0,
       state: 'new',
       createdAt: new Date().toISOString(),
+      // BetterFSRS extra state (initialized for all cards, only used by betterfsrs)
+      streak: 0,
+      difficultyEma: 5.0,
+      lastScheduledInterval: 0,
+      errorEma: 0,
+      reviewsSinceLapse: 100,
     };
     return saveCard(card);
   }
@@ -77,15 +85,18 @@ const Storage = (() => {
     return load(HISTORY_KEY);
   }
 
-  function addReview(cardId, rating, elapsed, interval) {
+  function addReview(cardId, rating, elapsed, interval, algorithm, predictedR) {
     const history = getHistory();
-    history.push({
+    const entry = {
       cardId,
       rating,
       elapsed,
       interval,
       timestamp: new Date().toISOString(),
-    });
+    };
+    if (algorithm) entry.algorithm = algorithm;
+    if (predictedR !== undefined) entry.predictedR = predictedR;
+    history.push(entry);
     save(HISTORY_KEY, history);
   }
 
@@ -137,6 +148,44 @@ const Storage = (() => {
     return { total: cards.length, due, newCards, mature, young, reviewsToday, streak };
   }
 
+  // --- Experiment stats ---
+
+  function getExperimentStats() {
+    const cards = getCards();
+    const history = getHistory();
+
+    const algoStats = {};
+    ['fsrs5', 'betterfsrs'].forEach(algo => {
+      const algoCards = cards.filter(c => c.algorithm === algo);
+      const algoReviews = history.filter(h => h.algorithm === algo);
+      const recalled = algoReviews.filter(h => h.rating >= 2).length;
+      const total = algoReviews.length;
+      const retention = total > 0 ? recalled / total : 0;
+
+      // Mean predicted R (only for reviews that have it)
+      const withPredR = algoReviews.filter(h => h.predictedR !== undefined);
+      const meanPredR = withPredR.length > 0
+        ? withPredR.reduce((sum, h) => sum + h.predictedR, 0) / withPredR.length
+        : 0;
+
+      // Mean interval
+      const meanInterval = total > 0
+        ? algoReviews.reduce((sum, h) => sum + (h.interval || 0), 0) / total
+        : 0;
+
+      algoStats[algo] = {
+        cards: algoCards.length,
+        reviews: total,
+        recalled,
+        retention,
+        meanPredR,
+        meanInterval,
+      };
+    });
+
+    return algoStats;
+  }
+
   // --- Export/Import ---
   function exportData() {
     return JSON.stringify({ cards: getCards(), history: getHistory() }, null, 2);
@@ -151,7 +200,7 @@ const Storage = (() => {
   return {
     getCards, getCard, saveCard, deleteCard, createCard,
     getDueCards, getHistory, addReview, removeLastReview, getStats,
-    exportData, importData,
+    getExperimentStats, exportData, importData,
   };
 })();
 

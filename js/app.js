@@ -178,8 +178,9 @@ const App = (() => {
       }
     }
 
-    // Show preview intervals
-    const preview = FSRS.previewRatings(currentCard);
+    // Show preview intervals (use the card's assigned algorithm)
+    const algo = getAlgorithm(currentCard);
+    const preview = algo.previewRatings(currentCard);
     for (let r = 1; r <= 4; r++) {
       const btn = $(`[data-rating="${r}"]`);
       if (btn) {
@@ -197,6 +198,10 @@ const App = (() => {
     $('#rating-buttons').classList.remove('hidden');
   }
 
+  function getAlgorithm(card) {
+    return card.algorithm === 'betterfsrs' ? BetterFSRS : FSRS;
+  }
+
   function handleRating(rating) {
     if (!currentCard) return;
 
@@ -208,10 +213,14 @@ const App = (() => {
       ? (now - new Date(currentCard.lastReview)) / (1000 * 60 * 60 * 24)
       : 0;
 
-    const updated = FSRS.review(currentCard, rating, now);
+    const algo = getAlgorithm(currentCard);
+    const updated = algo.review(currentCard, rating, now);
     const merged = { ...currentCard, ...updated };
     Storage.saveCard(merged);
-    Storage.addReview(currentCard.id, rating, elapsed, updated.interval);
+
+    // Log with algorithm and predictedR for experiment tracking
+    const predictedR = updated.predictedR !== undefined ? updated.predictedR : undefined;
+    Storage.addReview(currentCard.id, rating, elapsed, updated.interval, currentCard.algorithm, predictedR);
     sessionRatings.push(rating);
 
     // Push to undo stack
@@ -443,6 +452,43 @@ const App = (() => {
 
     // Forecast (next 14 days)
     renderForecast();
+
+    // A/B experiment
+    renderExperiment();
+  }
+
+  function renderExperiment() {
+    const exp = Storage.getExperimentStats();
+    const f = exp.fsrs5;
+    const b = exp.betterfsrs;
+
+    $('#exp-fsrs5-cards').textContent = f.cards;
+    $('#exp-better-cards').textContent = b.cards;
+    $('#exp-fsrs5-reviews').textContent = f.reviews;
+    $('#exp-better-reviews').textContent = b.reviews;
+
+    $('#exp-fsrs5-retention').textContent = f.reviews > 0
+      ? `${(f.retention * 100).toFixed(1)}%` : '—';
+    $('#exp-better-retention').textContent = b.reviews > 0
+      ? `${(b.retention * 100).toFixed(1)}%` : '—';
+
+    $('#exp-fsrs5-predr').textContent = f.reviews > 0 && f.meanPredR > 0
+      ? `${(f.meanPredR * 100).toFixed(1)}%` : '—';
+    $('#exp-better-predr').textContent = b.reviews > 0 && b.meanPredR > 0
+      ? `${(b.meanPredR * 100).toFixed(1)}%` : '—';
+
+    $('#exp-fsrs5-interval').textContent = f.reviews > 0
+      ? formatInterval(Math.round(f.meanInterval)) : '—';
+    $('#exp-better-interval').textContent = b.reviews > 0
+      ? formatInterval(Math.round(b.meanInterval)) : '—';
+
+    const summaryEl = $('#experiment-summary');
+    const totalReviews = f.reviews + b.reviews;
+    if (totalReviews === 0) {
+      summaryEl.textContent = 'No experiment data yet. Create and review cards to start the A/B test.';
+    } else {
+      summaryEl.textContent = `${f.cards + b.cards} cards · ${totalReviews} reviews · 50/50 random assignment`;
+    }
   }
 
   function renderHeatmap(history) {

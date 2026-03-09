@@ -610,6 +610,53 @@ textarea { min-height: 80px; }
   margin-top: 12px;
 }
 
+/* === Experiment Table === */
+.experiment-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.experiment-table th {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  padding: 8px 12px;
+  text-align: center;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.experiment-table th:first-child {
+  text-align: left;
+}
+
+.experiment-table td {
+  padding: 8px 12px;
+  text-align: center;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.experiment-table td.exp-label {
+  text-align: left;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.experiment-table tbody tr + tr {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.experiment-summary {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 12px;
+}
+
 /* === Study Heatmap === */
 #heatmap-container {
   overflow-x: auto;

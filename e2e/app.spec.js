@@ -1012,4 +1012,148 @@ test.describe('FSRS Web App', () => {
     );
     expect(hasText).toBe(true);
   });
+
+  // --- A/B Experiment tests ---
+
+  test('new cards are assigned an algorithm (fsrs5 or betterfsrs)', async ({ page }) => {
+    await page.goto('/');
+
+    // Create several cards and check they get algorithm assignments
+    await page.getByTestId('nav-create').click();
+    for (let i = 0; i < 6; i++) {
+      await page.getByTestId('card-front').fill(`AB test ${i}`);
+      await page.getByTestId('card-back').fill(`Answer ${i}`);
+      await page.getByTestId('create-card-btn').click();
+    }
+
+    // Check localStorage for algorithm assignments
+    const algorithms = await page.evaluate(() => {
+      const cards = JSON.parse(localStorage.getItem('fsrs_cards')) || [];
+      return cards.map(c => c.algorithm);
+    });
+
+    expect(algorithms.length).toBe(6);
+    algorithms.forEach(a => {
+      expect(['fsrs5', 'betterfsrs']).toContain(a);
+    });
+  });
+
+  test('review logs include algorithm and predictedR', async ({ page }) => {
+    await page.goto('/');
+
+    // Create and review a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Experiment log Q');
+    await page.getByTestId('card-back').fill('Experiment log A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Check review history has algorithm and predictedR
+    const review = await page.evaluate(() => {
+      const history = JSON.parse(localStorage.getItem('fsrs_history')) || [];
+      return history[history.length - 1];
+    });
+
+    expect(review.algorithm).toBeDefined();
+    expect(['fsrs5', 'betterfsrs']).toContain(review.algorithm);
+    expect(review.predictedR).toBeDefined();
+    expect(typeof review.predictedR).toBe('number');
+  });
+
+  test('experiment section shows in stats page', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    await expect(page.getByTestId('experiment-container')).toBeVisible();
+    await expect(page.getByTestId('experiment-table')).toBeVisible();
+    await expect(page.getByTestId('experiment-summary')).toBeVisible();
+  });
+
+  test('experiment table shows data after reviews', async ({ page }) => {
+    await page.goto('/');
+
+    // Create and review a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Exp data Q');
+    await page.getByTestId('card-back').fill('Exp data A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Check experiment section shows data
+    await page.getByTestId('nav-stats').click();
+    await expect(page.getByTestId('experiment-summary')).toContainText('1 reviews');
+  });
+
+  test('experiment shows empty message when no reviews', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    await expect(page.getByTestId('experiment-summary')).toContainText('No experiment data yet');
+  });
+
+  test('both algorithms can schedule cards correctly', async ({ page }) => {
+    await page.goto('/');
+
+    // Force-create one card of each type and review both
+    await page.evaluate(() => {
+      // Clear existing
+      localStorage.clear();
+
+      const now = new Date().toISOString();
+      const cards = [
+        {
+          id: 'test-fsrs5', front: 'FSRS5 Q', back: 'FSRS5 A',
+          algorithm: 'fsrs5', stability: 0, difficulty: 0,
+          lastReview: null, due: now, interval: 0, reps: 0, lapses: 0,
+          state: 'new', createdAt: now, streak: 0, difficultyEma: 5.0,
+          lastScheduledInterval: 0, errorEma: 0, reviewsSinceLapse: 100,
+        },
+        {
+          id: 'test-better', front: 'Better Q', back: 'Better A',
+          algorithm: 'betterfsrs', stability: 0, difficulty: 0,
+          lastReview: null, due: now, interval: 0, reps: 0, lapses: 0,
+          state: 'new', createdAt: now, streak: 0, difficultyEma: 5.0,
+          lastScheduledInterval: 0, errorEma: 0, reviewsSinceLapse: 100,
+        },
+      ];
+      localStorage.setItem('fsrs_cards', JSON.stringify(cards));
+    });
+    await page.reload();
+
+    // Start review
+    await page.getByTestId('start-review-btn').click();
+
+    // Review first card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Review second card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Summary should show 2 cards reviewed
+    await expect(page.getByTestId('summary-total')).toHaveText('2');
+    await page.getByTestId('summary-done-btn').click();
+
+    // Both cards should be scheduled (no longer due)
+    await expect(page.getByTestId('stat-due')).toHaveText('0');
+
+    // Check that review log has both algorithms
+    const algorithms = await page.evaluate(() => {
+      const history = JSON.parse(localStorage.getItem('fsrs_history')) || [];
+      return history.map(h => h.algorithm);
+    });
+    expect(algorithms).toContain('fsrs5');
+    expect(algorithms).toContain('betterfsrs');
+  });
 });

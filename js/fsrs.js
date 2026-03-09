@@ -117,15 +117,17 @@ const FSRS = (() => {
    */
   function review(card, rating, now = new Date(), w = DEFAULT_W) {
     const isNew = card.state === 'new';
-    let s, d, elapsed;
+    let s, d, elapsed, predictedR;
 
     if (isNew) {
       s = initStability(rating, w);
       d = initDifficulty(rating, w);
       elapsed = 0;
+      predictedR = 0.9;
     } else {
       elapsed = (now - new Date(card.lastReview)) / (1000 * 60 * 60 * 24); // days
-      const r = retrievability(elapsed, card.stability);
+      predictedR = retrievability(elapsed, card.stability);
+      const r = predictedR;
       d = nextDifficulty(card.difficulty, rating, w);
 
       if (rating === 1) {
@@ -147,6 +149,7 @@ const FSRS = (() => {
       reps: (card.reps || 0) + 1,
       lapses: rating === 1 ? (card.lapses || 0) + 1 : (card.lapses || 0),
       state: 'review',
+      predictedR: predictedR,
     };
   }
 

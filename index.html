@@ -237,6 +237,48 @@
           <p id="forecast-summary" class="forecast-summary" data-testid="forecast-summary"></p>
         </div>
       </div>
+      <div class="stats-section">
+        <h3>A/B Experiment</h3>
+        <div id="experiment-container" data-testid="experiment-container">
+          <table class="experiment-table" data-testid="experiment-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th data-testid="exp-col-fsrs5">FSRS-5</th>
+                <th data-testid="exp-col-betterfsrs">BetterFSRS</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="exp-label">Cards</td>
+                <td id="exp-fsrs5-cards" data-testid="exp-fsrs5-cards">0</td>
+                <td id="exp-better-cards" data-testid="exp-better-cards">0</td>
+              </tr>
+              <tr>
+                <td class="exp-label">Reviews</td>
+                <td id="exp-fsrs5-reviews" data-testid="exp-fsrs5-reviews">0</td>
+                <td id="exp-better-reviews" data-testid="exp-better-reviews">0</td>
+              </tr>
+              <tr>
+                <td class="exp-label">Retention</td>
+                <td id="exp-fsrs5-retention" data-testid="exp-fsrs5-retention">—</td>
+                <td id="exp-better-retention" data-testid="exp-better-retention">—</td>
+              </tr>
+              <tr>
+                <td class="exp-label">Predicted R</td>
+                <td id="exp-fsrs5-predr" data-testid="exp-fsrs5-predr">—</td>
+                <td id="exp-better-predr" data-testid="exp-better-predr">—</td>
+              </tr>
+              <tr>
+                <td class="exp-label">Avg Interval</td>
+                <td id="exp-fsrs5-interval" data-testid="exp-fsrs5-interval">—</td>
+                <td id="exp-better-interval" data-testid="exp-better-interval">—</td>
+              </tr>
+            </tbody>
+          </table>
+          <p id="experiment-summary" class="experiment-summary" data-testid="experiment-summary"></p>
+        </div>
+      </div>
       <div class="data-buttons">
         <button id="export-btn" class="btn btn-secondary" data-testid="export-btn">Export Data</button>
         <button id="import-btn" class="btn btn-secondary" data-testid="import-btn">Import Data</button>
@@ -295,6 +337,7 @@
   </nav>
 
   <script src="js/fsrs.js"></script>
+  <script src="js/better-fsrs.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/app.js"></script>
 </body>

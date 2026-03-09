@@ -930,4 +930,86 @@ test.describe('FSRS Web App', () => {
     await expect(page.getByTestId('review-front')).toHaveText('Ctrl-Z Q1');
     await expect(page.getByTestId('toast')).toHaveText('Rating undone');
   });
+
+  // --- Study heatmap tests ---
+
+  test('stats page shows heatmap section', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    await expect(page.getByTestId('heatmap-container')).toBeVisible();
+    await expect(page.getByTestId('heatmap-grid')).toBeVisible();
+    await expect(page.getByTestId('heatmap-legend')).toBeVisible();
+    await expect(page.getByTestId('heatmap-months')).toBeVisible();
+    await expect(page.getByTestId('heatmap-day-labels')).toBeVisible();
+  });
+
+  test('heatmap shows empty message when no reviews exist', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    await expect(page.getByTestId('heatmap-summary')).toHaveText('No reviews in the last 90 days.');
+  });
+
+  test('heatmap renders grid cells', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    // Should have heatmap cells (at least 91 days worth, aligned to weeks)
+    const cells = page.getByTestId('heatmap-cell');
+    const count = await cells.count();
+    expect(count).toBeGreaterThanOrEqual(91);
+  });
+
+  test('heatmap updates after reviewing cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Create and review a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Heatmap Q');
+    await page.getByTestId('card-back').fill('Heatmap A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Check heatmap
+    await page.getByTestId('nav-stats').click();
+    await expect(page.getByTestId('heatmap-summary')).toContainText('1 review');
+    await expect(page.getByTestId('heatmap-summary')).toContainText('1 day');
+  });
+
+  test('heatmap legend shows intensity levels', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    const legend = page.getByTestId('heatmap-legend');
+    await expect(legend).toBeVisible();
+
+    // Legend should have Less and More labels
+    await expect(legend.locator('.heatmap-legend-label').first()).toHaveText('Less');
+    await expect(legend.locator('.heatmap-legend-label').last()).toHaveText('More');
+
+    // Should have 5 level cells in the legend
+    await expect(legend.locator('.heatmap-cell')).toHaveCount(5);
+  });
+
+  test('heatmap shows month labels', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+
+    // Should have at least one month label visible
+    const monthLabels = page.locator('.heatmap-month-label');
+    const count = await monthLabels.count();
+    expect(count).toBeGreaterThan(0);
+
+    // At least one label should have text content
+    const hasText = await monthLabels.evaluateAll(els =>
+      els.some(el => el.textContent.trim().length > 0)
+    );
+    expect(hasText).toBe(true);
+  });
 });

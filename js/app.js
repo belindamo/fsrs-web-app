@@ -413,6 +413,9 @@ const App = (() => {
     $('#stats-mature-cards').textContent = stats.mature;
     $('#stats-young-cards').textContent = stats.young;
 
+    // Heatmap
+    renderHeatmap(history);
+
     // Rating distribution
     const dist = { 1: 0, 2: 0, 3: 0, 4: 0 };
     history.forEach(h => { dist[h.rating] = (dist[h.rating] || 0) + 1; });
@@ -440,6 +443,103 @@ const App = (() => {
 
     // Forecast (next 14 days)
     renderForecast();
+  }
+
+  function renderHeatmap(history) {
+    const gridEl = $('#heatmap-grid');
+    const monthsEl = $('#heatmap-months');
+    const summaryEl = $('#heatmap-summary');
+    if (!gridEl || !monthsEl || !summaryEl) return;
+
+    const TOTAL_DAYS = 91; // ~13 weeks
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Count reviews per day
+    const dayCounts = {};
+    history.forEach(h => {
+      const d = new Date(h.timestamp);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dayCounts[key] = (dayCounts[key] || 0) + 1;
+    });
+
+    // Build array of days, starting from (TOTAL_DAYS-1) days ago
+    // Align to start on a Sunday for clean columns
+    const startDate = new Date(todayStart);
+    startDate.setDate(startDate.getDate() - (TOTAL_DAYS - 1));
+    // Adjust start to previous Sunday
+    const startDow = startDate.getDay(); // 0=Sun
+    startDate.setDate(startDate.getDate() - startDow);
+
+    const endDate = new Date(todayStart);
+    const totalDays = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Build grid: columns = weeks, rows = days of week (Sun-Sat)
+    // We'll render as a flat grid with CSS grid doing 7 rows
+    const cells = [];
+    let activeDays = 0;
+    let totalReviews = 0;
+
+    for (let i = 0; i < totalDays; i++) {
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + i);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+      const count = dayCounts[key] || 0;
+      const isFuture = date > todayStart;
+
+      let level = 0;
+      if (!isFuture && count > 0) {
+        if (count <= 3) level = 1;
+        else if (count <= 8) level = 2;
+        else if (count <= 15) level = 3;
+        else level = 4;
+        activeDays++;
+        totalReviews += count;
+      }
+
+      cells.push({ date, key, count, level, isFuture });
+    }
+
+    // Render grid cells
+    gridEl.innerHTML = '';
+    cells.forEach(cell => {
+      const el = document.createElement('span');
+      el.className = 'heatmap-cell';
+      el.setAttribute('data-level', cell.isFuture ? 'future' : String(cell.level));
+      el.setAttribute('data-testid', 'heatmap-cell');
+      el.setAttribute('data-date', cell.key);
+      if (!cell.isFuture) {
+        el.title = `${cell.key}: ${cell.count} review${cell.count !== 1 ? 's' : ''}`;
+      }
+      gridEl.appendChild(el);
+    });
+
+    // Render month labels
+    monthsEl.innerHTML = '';
+    // Walk through weeks and place a label when the month changes
+    const numWeeks = Math.ceil(totalDays / 7);
+    let lastMonth = -1;
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    for (let w = 0; w < numWeeks; w++) {
+      const weekStart = new Date(startDate);
+      weekStart.setDate(weekStart.getDate() + w * 7);
+      const m = weekStart.getMonth();
+      const span = document.createElement('span');
+      span.className = 'heatmap-month-label';
+      if (m !== lastMonth) {
+        span.textContent = monthNames[m];
+        lastMonth = m;
+      }
+      monthsEl.appendChild(span);
+    }
+
+    // Summary
+    if (totalReviews === 0) {
+      summaryEl.textContent = 'No reviews in the last 90 days.';
+    } else {
+      summaryEl.textContent = `${totalReviews} review${totalReviews !== 1 ? 's' : ''} across ${activeDays} day${activeDays !== 1 ? 's' : ''} in the last 90 days`;
+    }
   }
 
   function renderReviewChart(history) {

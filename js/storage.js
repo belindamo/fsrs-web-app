@@ -197,9 +197,13 @@ const Storage = (() => {
     if (data.history) save(HISTORY_KEY, data.history);
   }
 
+  function getCardHistory(cardId) {
+    return getHistory().filter(h => h.cardId === cardId);
+  }
+
   return {
     getCards, getCard, saveCard, deleteCard, createCard,
-    getDueCards, getHistory, addReview, removeLastReview, getStats,
+    getDueCards, getHistory, getCardHistory, addReview, removeLastReview, getStats,
     getExperimentStats, exportData, importData,
   };
 })();

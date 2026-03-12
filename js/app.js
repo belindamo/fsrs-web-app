@@ -374,6 +374,38 @@ const App = (() => {
 
       let detailHtml = '';
       if (isExpanded) {
+        const reviews = Storage.getCardHistory(card.id);
+        let timelineHtml = '';
+        if (reviews.length > 0) {
+          const timelineRows = reviews.map(r => {
+            const ratingLabels = { 1: 'Again', 2: 'Hard', 3: 'Good', 4: 'Easy' };
+            const ratingColors = { 1: '#ef4444', 2: '#f59e0b', 3: '#22c55e', 4: '#3b82f6' };
+            const label = ratingLabels[r.rating] || '?';
+            const color = ratingColors[r.rating] || 'var(--text-muted)';
+            const date = new Date(r.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const time = new Date(r.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+            const predR = r.predictedR !== undefined ? `${(r.predictedR * 100).toFixed(0)}%` : '—';
+            const ivl = r.interval ? formatInterval(r.interval) : '—';
+            return `<div class="timeline-row" data-testid="timeline-row">
+              <span class="timeline-date">${date} ${time}</span>
+              <span class="timeline-rating" style="color:${color}">${label}</span>
+              <span class="timeline-predr" title="Predicted recall">R: ${predR}</span>
+              <span class="timeline-ivl" title="New interval">→ ${ivl}</span>
+            </div>`;
+          }).join('');
+          timelineHtml = `
+            <div class="card-detail-timeline" data-testid="card-timeline">
+              <span class="card-detail-label">Review History</span>
+              <div class="timeline-list">${timelineRows}</div>
+            </div>`;
+        } else {
+          timelineHtml = `
+            <div class="card-detail-timeline" data-testid="card-timeline">
+              <span class="card-detail-label">Review History</span>
+              <p class="timeline-empty" data-testid="timeline-empty">No reviews yet</p>
+            </div>`;
+        }
+
         detailHtml = `
           <div class="card-detail" data-testid="card-detail">
             <div class="card-detail-answer">
@@ -388,6 +420,7 @@ const App = (() => {
               <div class="detail-chip"><span class="detail-chip-label">Difficulty</span><span class="detail-chip-value">${card.difficulty > 0 ? card.difficulty.toFixed(1) : '—'}</span></div>
               <div class="detail-chip"><span class="detail-chip-label">Next</span><span class="detail-chip-value">${card.state !== 'new' ? new Date(card.due).toLocaleDateString() : '—'}</span></div>
             </div>
+            ${timelineHtml}
           </div>
         `;
       }

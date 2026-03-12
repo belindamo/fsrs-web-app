@@ -1156,4 +1156,91 @@ test.describe('FSRS Web App', () => {
     expect(algorithms).toContain('fsrs5');
     expect(algorithms).toContain('betterfsrs');
   });
+
+  // --- Per-card review history timeline tests ---
+
+  test('expanded card shows "No reviews yet" for unreviewed card', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Timeline empty Q');
+    await page.getByTestId('card-back').fill('Timeline empty A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Expand it
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+
+    // Timeline section should exist with empty message
+    await expect(page.getByTestId('card-timeline')).toBeVisible();
+    await expect(page.getByTestId('timeline-empty')).toHaveText('No reviews yet');
+  });
+
+  test('expanded card shows review history after reviewing', async ({ page }) => {
+    await page.goto('/');
+
+    // Create and review a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Timeline test Q');
+    await page.getByTestId('card-back').fill('Timeline test A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Review the card
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Expand card in card list
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+
+    // Should show timeline with one review row
+    await expect(page.getByTestId('card-timeline')).toBeVisible();
+    const rows = page.getByTestId('timeline-row');
+    await expect(rows).toHaveCount(1);
+
+    // Row should contain "Good" rating
+    await expect(rows.first()).toContainText('Good');
+  });
+
+  test('review timeline shows redict', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card, review it twice (will need to make it due again)
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Multi review Q');
+    await page.getByTestId('card-back').fill('Multi review A');
+    await page.getByTestId('create-card-btn').click();
+
+    // First review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-1').click(); // Again — makes card due immediately
+    await page.getByTestId('summary-done-btn').click();
+
+    // Second review (card is due again after "Again" rating)
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-4').click(); // Easy
+    await page.getByTestId('summary-done-btn').click();
+
+    // Expand card
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+
+    // Should show 2 timeline rows
+    const rows = page.getByTestId('timeline-row');
+    await expect(rows).toHaveCount(2);
+
+    // First row should contain "Again", second "Easy"
+    await expect(rows.nth(0)).toContainText('Again');
+    await expect(rows.nth(1)).toContainText('Easy');
+
+    // Rows should contain predicted R values
+    await expect(rows.nth(0)).toContainText('R:');
+  });
 });

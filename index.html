@@ -58,13 +58,24 @@
         <form id="create-form" data-testid="create-form">
           <div class="form-group">
             <label for="card-front">Front</label>
-            <textarea id="card-front" data-testid="card-front" placeholder="Question or prompt..." rows="3"></textarea>
+            <textarea id="card-front" data-testid="card-front" placeholder="Question or prompt... (Markdown supported)" rows="3"></textarea>
           </div>
           <div class="form-group">
             <label for="card-back">Back</label>
-            <textarea id="card-back" data-testid="card-back" placeholder="Answer..." rows="3"></textarea>
+            <textarea id="card-back" data-testid="card-back" placeholder="Answer... (supports **bold**, `code`, ```code blocks```)" rows="3"></textarea>
           </div>
-          <button type="submit" class="btn btn-primary" data-testid="create-card-btn">Create Card</button>
+          <div id="create-preview" class="create-preview hidden" data-testid="create-preview">
+            <div class="preview-label">Preview</div>
+            <div class="preview-card">
+              <div id="preview-front" class="preview-front" data-testid="preview-front"></div>
+              <hr class="preview-divider">
+              <div id="preview-back" class="preview-back" data-testid="preview-back"></div>
+            </div>
+          </div>
+          <div class="create-actions">
+            <button type="button" id="preview-toggle-btn" class="btn btn-secondary btn-sm" data-testid="preview-toggle">Preview</button>
+            <button type="submit" class="btn btn-primary" data-testid="create-card-btn">Create Card</button>
+          </div>
         </form>
       </div>
 
@@ -337,6 +348,7 @@
   </nav>
 
   <script src="js/vendor/ts-fsrs.umd.js"></script>
+  <script src="js/markdown.js"></script>
   <script src="js/fsrs.js"></script>
   <script src="js/better-fsrs.js"></script>
   <script src="js/storage.js"></script>

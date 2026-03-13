@@ -9,6 +9,7 @@ const App = (() => {
   let cardSearchQuery = '';
   let cardFilterState = 'all';
   let createMode = 'single';
+  let previewVisible = false;
   let sessionRatings = []; // Track ratings for session summary
   let expandedCardId = null; // Currently expanded card in card list
   let undoStack = []; // Stack of {cardSnapshot, rating} for undo during review
@@ -61,6 +62,7 @@ const App = (() => {
     Storage.createCard(front, back);
     $('#card-front').value = '';
     $('#card-back').value = '';
+    updatePreview();
     renderDashboard();
     renderCardList();
 
@@ -125,6 +127,42 @@ const App = (() => {
     showToast(`${count} card${count !== 1 ? 's' : ''} created!`);
   }
 
+  // --- Create preview ---
+
+  function togglePreview() {
+    previewVisible = !previewVisible;
+    const previewEl = $('#create-preview');
+    const toggleBtn = $('#preview-toggle-btn');
+    if (previewVisible) {
+      previewEl.classList.remove('hidden');
+      toggleBtn.textContent = 'Hide Preview';
+      updatePreview();
+    } else {
+      previewEl.classList.add('hidden');
+      toggleBtn.textContent = 'Preview';
+    }
+  }
+
+  function updatePreview() {
+    if (!previewVisible) return;
+    const front = $('#card-front').value.trim();
+    const back = $('#card-back').value.trim();
+    const frontEl = $('#preview-front');
+    const backEl = $('#preview-back');
+
+    if (front) {
+      renderMarkdown(frontEl, front);
+    } else {
+      frontEl.innerHTML = '<span style="color:var(--text-muted)">Front side</span>';
+    }
+
+    if (back) {
+      renderMarkdown(backEl, back);
+    } else {
+      backEl.innerHTML = '<span style="color:var(--text-muted)">Back side</span>';
+    }
+  }
+
   function switchCreateMode(mode) {
     createMode = mode;
     $$('.create-tab').forEach(t => t.classList.remove('selected'));
@@ -161,8 +199,8 @@ const App = (() => {
     currentCard = reviewQueue[0];
     answerRevealed = false;
 
-    $('#review-front').textContent = currentCard.front;
-    $('#review-back').textContent = '';
+    renderMarkdown($('#review-front'), currentCard.front);
+    $('#review-back').innerHTML = '';
     $('#review-back').classList.add('hidden');
     $('#show-answer-btn').classList.remove('hidden');
     $('#rating-buttons').classList.add('hidden');
@@ -192,7 +230,7 @@ const App = (() => {
 
   function revealAnswer() {
     answerRevealed = true;
-    $('#review-back').textContent = currentCard.back;
+    renderMarkdown($('#review-back'), currentCard.back);
     $('#review-back').classList.remove('hidden');
     $('#show-answer-btn').classList.add('hidden');
     $('#rating-buttons').classList.remove('hidden');
@@ -410,7 +448,7 @@ const App = (() => {
           <div class="card-detail" data-testid="card-detail">
             <div class="card-detail-answer">
               <span class="card-detail-label">Answer</span>
-              <div class="card-detail-value" data-testid="card-detail-answer">${escapeHtml(card.back)}</div>
+              <div class="card-detail-value md-content" data-testid="card-detail-answer">${Markdown.render(card.back)}</div>
             </div>
             <div class="card-detail-meta">
               <div class="detail-chip"><span class="detail-chip-label">Interval</span><span class="detail-chip-value">${card.state !== 'new' ? formatInterval(card.interval) : '—'}</span></div>
@@ -749,6 +787,20 @@ const App = (() => {
     $('#edit-modal').classList.add('hidden');
   }
 
+  // --- Markdown rendering ---
+
+  /**
+   * Render text into a DOM element with markdown formatting.
+   * If the text has no markdown syntax, falls back to plain text for speed.
+   */
+  function renderMarkdown(el, text) {
+    if (Markdown.hasMarkdown(text)) {
+      el.innerHTML = '<div class="md-content">' + Markdown.render(text) + '</div>';
+    } else {
+      el.textContent = text;
+    }
+  }
+
   // --- Utilities ---
 
   function formatInterval(days) {
@@ -793,6 +845,11 @@ const App = (() => {
 
     // Create form (single)
     $('#create-form').addEventListener('submit', handleCreateCard);
+
+    // Markdown preview
+    $('#preview-toggle-btn')?.addEventListener('click', togglePreview);
+    $('#card-front').addEventListener('input', updatePreview);
+    $('#card-back').addEventListener('input', updatePreview);
 
     // Bulk create
     $('#bulk-input').addEventListener('input', updateBulkPreview);

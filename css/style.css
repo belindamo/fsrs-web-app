@@ -1054,6 +1054,154 @@ textarea { min-height: 80px; }
   text-align: right;
 }
 
+/* === Markdown Content === */
+.md-content { text-align: left; word-break: break-word; }
+
+.md-content .md-p { margin-bottom: 8px; }
+.md-content .md-p:last-child { margin-bottom: 0; }
+
+.md-content .md-inline-code {
+  background: var(--surface-2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.88em;
+  color: #e879f9;
+  white-space: nowrap;
+}
+
+.md-content .md-code-block {
+  position: relative;
+  background: #0d1117;
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.md-content .md-code-block pre {
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 0;
+}
+
+.md-content .md-code-block code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #c9d1d9;
+  white-space: pre;
+}
+
+.md-content .md-code-lang {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  font-size: 0.6rem;
+  color: #484f58;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.md-content .md-blockquote {
+  border-left: 3px solid var(--primary);
+  padding: 6px 12px;
+  margin: 8px 0;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.md-content .md-list {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+
+.md-content .md-list li {
+  margin-bottom: 4px;
+  font-size: 0.95em;
+}
+
+.md-content .md-list li:last-child { margin-bottom: 0; }
+
+.md-content .md-h {
+  font-weight: 700;
+  margin: 8px 0 4px;
+}
+
+.md-content .md-h1 { font-size: 1.3em; }
+.md-content .md-h2 { font-size: 1.15em; }
+.md-content .md-h3 { font-size: 1.05em; }
+.md-content .md-h4 { font-size: 1em; color: var(--text-muted); }
+
+.md-content .md-hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+.md-content strong { font-weight: 700; }
+.md-content em { font-style: italic; }
+.md-content del { text-decoration: line-through; opacity: 0.7; }
+
+/* Review card markdown overrides — keep centered for short text */
+.review-card .md-content { width: 100%; }
+.review-card .md-content .md-code-block { text-align: left; }
+
+/* === Create Preview === */
+.create-preview {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+}
+
+.create-preview.hidden { display: none; }
+
+.preview-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.preview-card {
+  min-height: 60px;
+}
+
+.preview-front {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.preview-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 8px 0;
+}
+
+.preview-back {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.create-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.create-actions .btn-primary { flex: 1; }
+
+.btn-sm {
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  width: auto;
+  flex-shrink: 0;
+}
+
 /* === Responsive === */
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }

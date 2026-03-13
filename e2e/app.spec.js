@@ -1206,6 +1206,129 @@ test.describe('FSRS Web App', () => {
     await expect(rows.first()).toContainText('Good');
   });
 
+  // --- Markdown rendering tests ---
+
+  test('card with markdown renders formatted content in review', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card with markdown
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('What does this code do?\n\n```js\nconst x = 42;\n```');
+    await page.getByTestId('card-back').fill('It assigns **42** to `x`');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Front should render with markdown — should contain a code block
+    const front = page.getByTestId('review-front');
+    await expect(front.locator('.md-content')).toBeVisible();
+    await expect(front.locator('.md-code-block')).toBeVisible();
+    await expect(front.locator('code')).toContainText('const x = 42;');
+
+    // Reveal answer
+    await page.getByTestId('show-answer-btn').click();
+
+    // Back should render bold and inline code
+    const back = page.getByTestId('review-back');
+    await expect(back.locator('.md-content')).toBeVisible();
+    await expect(back.locator('strong')).toHaveText('42');
+    await expect(back.locator('.md-inline-code')).toHaveText('x');
+
+    // Rate to finish
+    await page.getByTestId('rating-3').click();
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+  });
+
+  test('plain text cards render without markdown wrapper', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a plain text card (no markdown syntax)
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('What is 2+2?');
+    await page.getByTestId('card-back').fill('4');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Should render as plain text (no md-content wrapper)
+    const front = page.getByTestId('review-front');
+    await expect(front).toHaveText('What is 2+2?');
+    await expect(front.locator('.md-content')).toHaveCount(0);
+
+    await page.getByTestId('show-answer-btn').click();
+    const back = page.getByTestId('review-back');
+    await expect(back).toHaveText('4');
+    await expect(back.locator('.md-content')).toHaveCount(0);
+  });
+
+  test('card detail shows markdown-rendered answer', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card with markdown answer
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('List the colors');
+    await page.getByTestId('card-back').fill('- Red\n- Green\n- Blue');
+    await page.getByTestId('create-card-btn').click();
+
+    // Expand card in list
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+
+    // Answer should have markdown rendering (unordered list)
+    const answer = page.getByTestId('card-detail-answer');
+    await expect(answer.locator('ul')).toBeVisible();
+    await expect(answer.locator('li')).toHaveCount(3);
+  });
+
+  test('markdown preview toggle shows rendered card while creating', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-create').click();
+
+    // Type markdown content
+    await page.getByTestId('card-front').fill('**Bold question**');
+    await page.getByTestId('card-back').fill('`code answer`');
+
+    // Preview should be hidden initially
+    await expect(page.getByTestId('create-preview')).toBeHidden();
+
+    // Click Preview button
+    await page.getByTestId('preview-toggle').click();
+    await expect(page.getByTestId('create-preview')).toBeVisible();
+
+    // Preview should show rendered markdown
+    const previewFront = page.getByTestId('preview-front');
+    await expect(previewFront.locator('strong')).toHaveText('Bold question');
+
+    const previewBack = page.getByTestId('preview-back');
+    await expect(previewBack.locator('.md-inline-code')).toHaveText('code answer');
+
+    // Toggle off
+    await page.getByTestId('preview-toggle').click();
+    await expect(page.getByTestId('create-preview')).toBeHidden();
+  });
+
+  test('markdown preview updates live as user types', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-create').click();
+
+    // Open preview
+    await page.getByTestId('preview-toggle').click();
+    await expect(page.getByTestId('create-preview')).toBeVisible();
+
+    // Type into front
+    await page.getByTestId('card-front').fill('**Hello**');
+    const previewFront = page.getByTestId('preview-front');
+    await expect(previewFront.locator('strong')).toHaveText('Hello');
+
+    // Update it
+    await page.getByTestId('card-front').fill('*Italic*');
+    await expect(previewFront.locator('em')).toHaveText('Italic');
+  });
+
   test('review timeline shows redict', async ({ page }) => {
     await page.goto('/');
 
@@ -1219,14 +1342,27 @@ test.describe('FSRS Web App', () => {
     await page.getByTestId('nav-dashboard').click();
     await page.getByTestId('start-review-btn').click();
     await page.getByTestId('show-answer-btn').click();
-    await page.getByTestId('rating-1').click(); // Again — makes card due immediately
+    await page.getByTestId('rating-1').click(); // 
     await page.getByTestId('summary-done-btn').click();
 
-    // Second review (card is due again after "Again" rating)
-    await page.getByTestId('start-review-btn').click();
-    await page.getByTestId('show-answer-btn').click();
-    await page.getByTestId('rating-4').click(); // Easy
-    await page.getByTestId('summary-done-btn').click();
+    // Inject an additional older review entry in localStorage to simulate multi-review
+    await page.evaluate(() => {
+      const cards = JSON.parse(localStorage.getItem('fsrs_cards')) || [];
+      if (cards.length === 0) return;
+      const card = cards[0];
+      const history = JSON.parse(localStorage.getItem('fsrs_history')) || [];
+      // Add a fake older review
+      history.unshift({
+        cardId: card.id,
+        rating: 1,
+        elapsed: 0,
+        interval: 1,
+        timestamp: new Date(Date.now() - 86400000).toISOString(),
+        algorithm: card.algorithm,
+        predictedR: 0.9,
+      });
+      localStorage.setItem('fsrs_history', JSON.stringify(history));
+    });
 
     // Expand card
     await page.getByTestId('nav-cards').click();
@@ -1236,11 +1372,13 @@ test.describe('FSRS Web App', () => {
     const rows = page.getByTestId('timeline-row');
     await expect(rows).toHaveCount(2);
 
-    // First row should contain "Again", second "Easy"
+    // First row should be "Again" (the injected older review)
     await expect(rows.nth(0)).toContainText('Again');
-    await expect(rows.nth(1)).toContainText('Easy');
+    // Second row should be "Again" (the real review was rated Again)
+    await expect(rows.nth(1)).toContainText('Again');
 
-    // Rows should contain predicted R values
+    // Rows should contain R: values
     await expect(rows.nth(0)).toContainText('R:');
+    await expect(rows.nth(1)).toContainText('R:');
   });
 });

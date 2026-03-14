@@ -458,7 +458,7 @@ test.describe('FSRS Web App', () => {
   test('expanding one card collapses any previously expanded card', async ({ page }) => {
     await page.goto('/');
 
-    // Create two cards
+    // Create two cards (sorted newest-first, so Card Two will be at index 0)
     await page.getByTestId('nav-create').click();
     await page.getByTestId('card-front').fill('Card One');
     await page.getByTestId('card-back').fill('Answer One');
@@ -468,19 +468,19 @@ test.describe('FSRS Web App', () => {
     await page.getByTestId('card-back').fill('Answer Two');
     await page.getByTestId('create-card-btn').click();
 
-    // Go to cards
+    // Go to cards — default sort is newest first, so Card Two is row 0
     await page.getByTestId('nav-cards').click();
     const headers = page.getByTestId('card-row-header');
 
-    // Expand first card
+    // Expand first row (Card Two — newest)
     await headers.nth(0).click();
     await expect(page.getByTestId('card-detail')).toHaveCount(1);
-    await expect(page.getByTestId('card-detail-answer')).toHaveText('Answer One');
+    await expect(page.getByTestId('card-detail-answer')).toHaveText('Answer Two');
 
-    // Expand second card — first should collapse
+    // Expand second row (Card One) — first should collapse
     await headers.nth(1).click();
     await expect(page.getByTestId('card-detail')).toHaveCount(1);
-    await expect(page.getByTestId('card-detail-answer')).toHaveText('Answer Two');
+    await expect(page.getByTestId('card-detail-answer')).toHaveText('Answer One');
   });
 
   test('expanded card shows metadata chips', async ({ page }) => {
@@ -1380,5 +1380,238 @@ test.describe('FSRS Web App', () => {
     // Rows should contain R: values
     await expect(rows.nth(0)).toContainText('R:');
     await expect(rows.nth(1)).toContainText('R:');
+  });
+
+  // --- Card Sorting ---
+
+  test('sort dropdown is present in cards view', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-cards').click();
+    const sort = page.getByTestId('card-sort');
+    await expect(sort).toBeVisible();
+    // Default value should be newest
+    await expect(sort).toHaveValue('created-desc');
+  });
+
+  test('sort cards alphabetically A-Z', async ({ page }) => {
+    await page.goto('/');
+
+    // Create cards with known fronts
+    await page.evaluate(() => {
+      const cards = [
+        { front: 'Zebra', back: 'A striped animal' },
+        { front: 'Apple', back: 'A fruit' },
+        { front: 'Mango', back: 'A tropical fruit' },
+      ];
+      const stored = [];
+      cards.forEach((c, i) => {
+        stored.push({
+          id: `sort-test-${i}`,
+          front: c.front,
+          back: c.back,
+          algorithm: 'fsrs5',
+          stability: 0,
+          difficulty: 0,
+          lastReview: null,
+          due: new Date().toISOString(),
+          interval: 0,
+          reps: 0,
+          lapses: 0,
+          state: 'new',
+          createdAt: new Date(Date.now() - i * 60000).toISOString(),
+          streak: 0,
+          difficultyEma: 5.0,
+          lastScheduledInterval: 0,
+          errorEma: 0,
+          reviewsSinceLapse: 100,
+        });
+      });
+      localStorage.setItem('fsrs_cards', JSON.stringify(stored));
+    });
+    await page.reload();
+
+    await page.getByTestId('nav-cards').click();
+
+    // Sort A-Z
+    await page.getByTestId('card-sort').selectOption('alpha-asc');
+
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText('Apple');
+    await expect(rows.nth(1)).toContainText('Mango');
+    await expect(rows.nth(2)).toContainText('Zebra');
+  });
+
+  test('sort cards alphabetically Z-A', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const cards = [
+        { front: 'Zebra', back: 'A striped animal' },
+        { front: 'Apple', back: 'A fruit' },
+        { front: 'Mango', back: 'A tropical fruit' },
+      ];
+      const stored = [];
+      cards.forEach((c, i) => {
+        stored.push({
+          id: `sort-test-${i}`,
+          front: c.front,
+          back: c.back,
+          algorithm: 'fsrs5',
+          stability: 0,
+          difficulty: 0,
+          lastReview: null,
+          due: new Date().toISOString(),
+          interval: 0,
+          reps: 0,
+          lapses: 0,
+          state: 'new',
+          createdAt: new Date(Date.now() - i * 60000).toISOString(),
+          streak: 0,
+          difficultyEma: 5.0,
+          lastScheduledInterval: 0,
+          errorEma: 0,
+          reviewsSinceLapse: 100,
+        });
+      });
+      localStorage.setItem('fsrs_cards', JSON.stringify(stored));
+    });
+    await page.reload();
+
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-sort').selectOption('alpha-desc');
+
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText('Zebra');
+    await expect(rows.nth(1)).toContainText('Mango');
+    await expect(rows.nth(2)).toContainText('Apple');
+  });
+
+  test('sort cards by created oldest first', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const now = Date.now();
+      const stored = [
+        { id: 'c1', front: 'First', back: 'a', createdAt: new Date(now - 300000).toISOString() },
+        { id: 'c2', front: 'Second', back: 'b', createdAt: new Date(now - 100000).toISOString() },
+        { id: 'c3', front: 'Third', back: 'c', createdAt: new Date(now - 200000).toISOString() },
+      ].map(c => ({
+        ...c,
+        algorithm: 'fsrs5', stability: 0, difficulty: 0,
+        lastReview: null, due: new Date().toISOString(),
+        interval: 0, reps: 0, lapses: 0, state: 'new',
+        streak: 0, difficultyEma: 5.0, lastScheduledInterval: 0,
+        errorEma: 0, reviewsSinceLapse: 100,
+      }));
+      localStorage.setItem('fsrs_cards', JSON.stringify(stored));
+    });
+    await page.reload();
+
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-sort').selectOption('created-asc');
+
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(3);
+    // Oldest first: First (300s ago), Third (200s ago), Second (100s ago)
+    await expect(rows.nth(0)).toContainText('First');
+    await expect(rows.nth(1)).toContainText('Third');
+    await expect(rows.nth(2)).toContainText('Second');
+  });
+
+  test('sort cards by due soonest', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const now = Date.now();
+      const stored = [
+        { id: 'd1', front: 'Later', back: 'a', due: new Date(now + 86400000 * 3).toISOString() },
+        { id: 'd2', front: 'Soon', back: 'b', due: new Date(now + 86400000).toISOString() },
+        { id: 'd3', front: 'Soonest', back: 'c', due: new Date(now - 1000).toISOString() },
+      ].map(c => ({
+        ...c,
+        algorithm: 'fsrs5', stability: 0, difficulty: 0,
+        lastReview: null, interval: 0, reps: 0, lapses: 0, state: 'new',
+        createdAt: new Date().toISOString(),
+        streak: 0, difficultyEma: 5.0, lastScheduledInterval: 0,
+        errorEma: 0, reviewsSinceLapse: 100,
+      }));
+      localStorage.setItem('fsrs_cards', JSON.stringify(stored));
+    });
+    await page.reload();
+
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-sort').selectOption('due-asc');
+
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText('Soonest');
+    await expect(rows.nth(1)).toContainText('Soon');
+    await expect(rows.nth(2)).toContainText('Later');
+  });
+
+  test('sort by weakest stability', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const stored = [
+        { id: 's1', front: 'Strong', back: 'a', stability: 10 },
+        { id: 's2', front: 'Weak', back: 'b', stability: 1 },
+        { id: 's3', front: 'Medium', back: 'c', stability: 5 },
+      ].map(c => ({
+        ...c,
+        algorithm: 'fsrs5', difficulty: 5,
+        lastReview: null, due: new Date().toISOString(),
+        interval: 0, reps: 0, lapses: 0, state: 'review',
+        createdAt: new Date().toISOString(),
+        streak: 0, difficultyEma: 5.0, lastScheduledInterval: 0,
+        errorEma: 0, reviewsSinceLapse: 100,
+      }));
+      localStorage.setItem('fsrs_cards', JSON.stringify(stored));
+    });
+    await page.reload();
+
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-sort').selectOption('stability-asc');
+
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(0)).toContainText('Weak');
+    await expect(rows.nth(1)).toContainText('Medium');
+    await expect(rows.nth(2)).toContainText('Strong');
+  });
+
+  test('sorting works with filter applied', async ({ page }) => {
+    await page.goto('/');
+
+    await page.evaluate(() => {
+      const stored = [
+        { id: 'f1', front: 'Zebra', back: 'a', state: 'new' },
+        { id: 'f2', front: 'Apple', back: 'b', state: 'review', interval: 5 },
+        { id: 'f3', front: 'Mango', back: 'c', state: 'new' },
+      ].map(c => ({
+        ...c,
+        algorithm: 'fsrs5', stability: 0, difficulty: 0,
+        lastReview: null, due: new Date().toISOString(),
+        interval: c.interval || 0, reps: 0, lapses: 0,
+        createdAt: new Date().toISOString(),
+        streak: 0, difficultyEma: 5.0, lastScheduledInterval: 0,
+        errorEma: 0, reviewsSinceLapse: 100,
+      }));
+      localStorage.setItem('fsrs_cards', JSON.stringify(stored));
+    });
+    await page.reload();
+
+    await page.getByTestId('nav-cards').click();
+
+    // Filter to New only, then sort A-Z
+    await page.getByTestId('filter-new').click();
+    await page.getByTestId('card-sort').selectOption('alpha-asc');
+
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(2); // Only the 2 new cards
+    await expect(rows.nth(0)).toContainText('Mango');
+    await expect(rows.nth(1)).toContainText('Zebra');
   });
 });

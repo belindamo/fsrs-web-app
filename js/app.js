@@ -8,6 +8,7 @@ const App = (() => {
   let answerRevealed = false;
   let cardSearchQuery = '';
   let cardFilterState = 'all';
+  let cardSortOrder = 'created-desc';
   let createMode = 'single';
   let previewVisible = false;
   let sessionRatings = []; // Track ratings for session summary
@@ -371,9 +372,39 @@ const App = (() => {
     return filtered;
   }
 
+  function sortCards(cards) {
+    const sorted = [...cards];
+    switch (cardSortOrder) {
+      case 'created-desc':
+        sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        break;
+      case 'created-asc':
+        sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+        break;
+      case 'due-asc':
+        sorted.sort((a, b) => new Date(a.due) - new Date(b.due));
+        break;
+      case 'alpha-asc':
+        sorted.sort((a, b) => a.front.localeCompare(b.front));
+        break;
+      case 'alpha-desc':
+        sorted.sort((a, b) => b.front.localeCompare(a.front));
+        break;
+      case 'stability-asc':
+        sorted.sort((a, b) => (a.stability || 0) - (b.stability || 0));
+        break;
+      case 'interval-asc':
+        sorted.sort((a, b) => (a.interval || 0) - (b.interval || 0));
+        break;
+      default:
+        break;
+    }
+    return sorted;
+  }
+
   function renderCardList() {
     const allCards = Storage.getCards();
-    const filtered = filterCards(allCards);
+    const filtered = sortCards(filterCards(allCards));
     const list = $('#card-list');
     const countEl = $('#card-count');
     list.innerHTML = '';
@@ -917,6 +948,12 @@ const App = (() => {
 
     $('#edit-cancel-btn').addEventListener('click', closeEditModal);
     $('#edit-modal .modal-backdrop').addEventListener('click', closeEditModal);
+
+    // Card sort
+    $('#card-sort').addEventListener('change', (e) => {
+      cardSortOrder = e.target.value;
+      renderCardList();
+    });
 
     // Card search & filter
     $('#card-search').addEventListener('input', (e) => {

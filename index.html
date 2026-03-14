@@ -173,12 +173,23 @@
       <h2 class="section-title">All Cards</h2>
       <div class="cards-toolbar">
         <input type="text" id="card-search" data-testid="card-search" placeholder="Search cards..." autocomplete="off">
-        <div class="filter-pills" data-testid="filter-pills">
-          <button class="filter-pill selected" data-filter="all" data-testid="filter-all">All</button>
-          <button class="filter-pill" data-filter="due" data-testid="filter-due">Due</button>
-          <button class="filter-pill" data-filter="new" data-testid="filter-new">New</button>
-          <button class="filter-pill" data-filter="young" data-testid="filter-young">Young</button>
-          <button class="filter-pill" data-filter="mature" data-testid="filter-mature">Mature</button>
+        <div class="cards-toolbar-row">
+          <div class="filter-pills" data-testid="filter-pills">
+            <button class="filter-pill selected" data-filter="all" data-testid="filter-all">All</button>
+            <button class="filter-pill" data-filter="due" data-testid="filter-due">Due</button>
+            <button class="filter-pill" data-filter="new" data-testid="filter-new">New</button>
+            <button class="filter-pill" data-filter="young" data-testid="filter-young">Young</button>
+            <button class="filter-pill" data-filter="mature" data-testid="filter-mature">Mature</button>
+          </div>
+          <select id="card-sort" data-testid="card-sort" class="sort-select">
+            <option value="created-desc">Newest</option>
+            <option value="created-asc">Oldest</option>
+            <option value="due-asc">Due soonest</option>
+            <option value="alpha-asc">A → Z</option>
+            <option value="alpha-desc">Z → A</option>
+            <option value="stability-asc">Weakest</option>
+            <option value="interval-asc">Shortest interval</option>
+          </select>
         </div>
       </div>
       <p id="card-count" class="card-count" data-testid="card-count"></p>

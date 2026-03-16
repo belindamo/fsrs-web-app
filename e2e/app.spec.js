@@ -1614,4 +1614,308 @@ test.describe('FSRS Web App', () => {
     await expect(rows.nth(0)).toContainText('Mango');
     await expect(rows.nth(1)).toContainText('Zebra');
   });
+
+  // --- Card Tags ---
+
+  test('can create a card with tags', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-create').click();
+
+    await page.getByTestId('card-front').fill('What is 2+2?');
+    await page.getByTestId('card-back').fill('4');
+    await page.getByTestId('card-tags').fill('math, arithmetic');
+    await page.getByTestId('create-card-btn').click();
+
+    await expect(page.getByTestId('toast')).toHaveText('Card created!');
+
+    // Tags should appear on the card in the browse view
+    await page.getByTestId('nav-cards').click();
+    await expect(page.getByTestId('card-list')).toContainText('What is 2+2?');
+    const tagPills = page.getByTestId('tag-pill');
+    await expect(tagPills).toHaveCount(2);
+    await expect(tagPills.nth(0)).toHaveText('math');
+    await expect(tagPills.nth(1)).toHaveText('arithmetic');
+  });
+
+  test('tag filter appears when cards have tags', async ({ page }) => {
+    await page.goto('/');
+
+    // Create cards with different tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Bonjour');
+    await page.getByTestId('card-back').fill('Hello');
+    await page.locator('#card-tags').fill('french');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Hola');
+    await page.getByTestId('card-back').fill('Hello');
+    await page.locator('#card-tags').fill('spanish');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Ciao');
+    await page.getByTestId('card-back').fill('Hello');
+    await page.locator('#card-tags').fill('italian');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to browse view
+    await page.getByTestId('nav-cards').click();
+
+    // Tag filters should be visible
+    const tagFilters = page.getByTestId('tag-filters');
+    await expect(tagFilters).toBeVisible();
+
+    // Should have All + 3 tag pills
+    const pills = page.getByTestId('tag-filter-pill');
+    await expect(pills).toHaveCount(3);
+  });
+
+  test('can filter cards by tag', async ({ page }) => {
+    await page.goto('/');
+
+    // Create tagged cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('2+2');
+    await page.getByTestId('card-back').fill('4');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Paris');
+    await page.getByTestId('card-back').fill('France');
+    await page.locator('#card-tags').fill('geography');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('3*3');
+    await page.getByTestId('card-back').fill('9');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    // Browse and filter by math
+    await page.getByTestId('nav-cards').click();
+    await expect(page.getByTestId('card-row')).toHaveCount(3);
+
+    // Click on the "math" tag filter pill
+    await page.getByTestId('tag-filter-pill').filter({ hasText: 'math' }).click();
+    await expect(page.getByTestId('card-row')).toHaveCount(2);
+
+    // Click "All" to reset
+    await page.getByTestId('tag-filter-all').click();
+    await expect(page.getByTestId('card-row')).toHaveCount(3);
+  });
+
+  test('can edit card tags', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card with tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Test card');
+    await page.getByTestId('card-back').fill('Test answer');
+    await page.getByTestId('card-tags').fill('original');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to cards view and edit
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('edit-card').click();
+
+    // Edit modal should show existing tags
+    await expect(page.getByTestId('edit-tags')).toHaveValue('original');
+
+    // Change tags
+    await page.getByTestId('edit-tags').fill('updated, new-tag');
+    await page.getByTestId('edit-save').click();
+
+    await expect(page.getByTestId('toast')).toHaveText('Card updated');
+
+    // Tags should be updated in card list
+    const tagPills = page.getByTestId('tag-pill');
+    await expect(tagPills).toHaveCount(2);
+    await expect(tagPills.nth(0)).toHaveText('updated');
+    await expect(tagPills.nth(1)).toHaveText('new-tag');
+  });
+
+  test('cards without tags show no tag pills', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card without tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('No tags card');
+    await page.getByTestId('card-back').fill('No tags answer');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-cards').click();
+    await expect(page.getByTestId('card-list')).toContainText('No tags card');
+    await expect(page.getByTestId('tag-pill')).toHaveCount(0);
+  });
+
+  test('bulk create supports tags', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('tab-bulk').click();
+
+    await page.getByTestId('bulk-input').fill('Dog :: Canine :: animals\nCat :: Feline :: animals, pets');
+    await page.getByTestId('bulk-create-btn').click();
+
+    await page.getByTestId('nav-cards').click();
+    const rows = page.getByTestId('card-row');
+    await expect(rows).toHaveCount(2);
+
+    // Both cards should have the "animals" tag
+    const tagPills = page.getByTestId('tag-pill');
+    // Dog has 1 tag (animals), Cat has 2 tags (animals, pets) = 3 total
+    await expect(tagPills).toHaveCount(3);
+  });
+
+  test('search includes tags', async ({ page }) => {
+    await page.goto('/');
+
+    // Create cards with different tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Bonjour');
+    await page.getByTestId('card-back').fill('Hello');
+    await page.locator('#card-tags').fill('french, language');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('2+2');
+    await page.getByTestId('card-back').fill('4');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    // Search for tag name
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-search').fill('french');
+    await expect(page.getByTestId('card-row')).toHaveCount(1);
+    await expect(page.getByTestId('card-list')).toContainText('Bonjour');
+  });
+
+  // --- Tag-filtered review tests ---
+
+  test('dashboard shows tag filter when cards have tags', async ({ page }) => {
+    await page.goto('/');
+
+    // Create cards with tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Q1');
+    await page.getByTestId('card-back').fill('A1');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Q2');
+    await page.getByTestId('card-back').fill('A2');
+    await page.locator('#card-tags').fill('science');
+    await page.getByTestId('create-card-btn').click();
+
+    // Dashboard should show tag filter
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('dashboard-tag-filter')).toBeVisible();
+    await expect(page.getByTestId('review-tag-all')).toBeVisible();
+    await expect(page.getByTestId('review-tag-pill')).toHaveCount(2);
+  });
+
+  test('dashboard tag filter is hidden when no tags exist', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card without tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('No tag Q');
+    await page.getByTestId('card-back').fill('No tag A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Dashboard tag filter should be hidden
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('dashboard-tag-filter')).toBeHidden();
+  });
+
+  test('can filter review by tag and only review tagged cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a math card and a science card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Math Question');
+    await page.getByTestId('card-back').fill('Math Answer');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Science Question');
+    await page.getByTestId('card-back').fill('Science Answer');
+    await page.locator('#card-tags').fill('science');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to dashboard — should show 2 cards due
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('start-review-btn')).toContainText('2 cards');
+
+    // Click the math tag pill
+    const mathPill = page.getByTestId('review-tag-pill').filter({ hasText: 'math' });
+    await mathPill.click();
+
+    // Button should now show 1 card and include [math]
+    await expect(page.getByTestId('start-review-btn')).toContainText('1 card');
+    await expect(page.getByTestId('start-review-btn')).toContainText('[math]');
+
+    // Start review — should only see the math card
+    await page.getByTestId('start-review-btn').click();
+    await expect(page.getByTestId('review-front')).toHaveText('Math Question');
+    await expect(page.getByTestId('review-progress')).toContainText('math');
+
+    // Complete the review
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Should show summary with 1 card reviewed
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+    await expect(page.getByTestId('summary-total')).toHaveText('1');
+  });
+
+  test('selecting All tag filter reviews all due cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Create cards with different tags
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Tagged card');
+    await page.getByTestId('card-back').fill('Answer');
+    await page.locator('#card-tags').fill('tag-a');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Untagged card');
+    await page.getByTestId('card-back').fill('Answer 2');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to dashboard
+    await page.getByTestId('nav-dashboard').click();
+
+    // Select a tag, then select All
+    const tagPill = page.getByTestId('review-tag-pill').filter({ hasText: 'tag-a' });
+    await tagPill.click();
+    await expect(page.getByTestId('start-review-btn')).toContainText('1 card');
+
+    await page.getByTestId('review-tag-all').click();
+    await expect(page.getByTestId('start-review-btn')).toContainText('2 cards');
+  });
+
+  test('tag filter shows due count badges', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two math cards and one science card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('M1');
+    await page.getByTestId('card-back').fill('A1');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('M2');
+    await page.getByTestId('card-back').fill('A2');
+    await page.locator('#card-tags').fill('math');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('S1');
+    await page.getByTestId('card-back').fill('A3');
+    await page.locator('#card-tags').fill('science');
+    await page.getByTestId('create-card-btn').click();
+
+    // Dashboard should show tag filter with due counts
+    await page.getByTestId('nav-dashboard').click();
+    const mathPill = page.getByTestId('review-tag-pill').filter({ hasText: 'math' });
+    await expect(mathPill).toContainText('2');
+    const sciPill = page.getByTestId('review-tag-pill').filter({ hasText: 'science' });
+    await expect(sciPill).toContainText('1');
+  });
 });

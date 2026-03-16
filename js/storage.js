@@ -47,12 +47,13 @@ const Storage = (() => {
     save(HISTORY_KEY, history);
   }
 
-  function createCard(front, back) {
+  function createCard(front, back, tags) {
     const algorithm = Math.random() < 0.5 ? 'fsrs5' : 'betterfsrs';
     const card = {
       id: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2),
       front,
       back,
+      tags: Array.isArray(tags) ? tags.filter(t => t.length > 0) : [],
       algorithm,
       stability: 0,
       difficulty: 0,
@@ -75,8 +76,23 @@ const Storage = (() => {
 
   // --- Due cards ---
 
-  function getDueCards(now = new Date()) {
-    return getCards().filter(c => new Date(c.due) <= now);
+  function getDueCards(now = new Date(), tag) {
+    let cards = getCards().filter(c => new Date(c.due) <= now);
+    if (tag) {
+      cards = cards.filter(c => Array.isArray(c.tags) && c.tags.includes(tag));
+    }
+    return cards;
+  }
+
+  function getDueCountByTag(now = new Date()) {
+    const due = getCards().filter(c => new Date(c.due) <= now);
+    const counts = {};
+    due.forEach(c => {
+      if (Array.isArray(c.tags)) {
+        c.tags.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+      }
+    });
+    return counts;
   }
 
   // --- Review history ---
@@ -201,10 +217,18 @@ const Storage = (() => {
     return getHistory().filter(h => h.cardId === cardId);
   }
 
+  function getAllTags() {
+    const tags = new Set();
+    getCards().forEach(c => {
+      if (Array.isArray(c.tags)) c.tags.forEach(t => tags.add(t));
+    });
+    return [...tags].sort((a, b) => a.localeCompare(b));
+  }
+
   return {
     getCards, getCard, saveCard, deleteCard, createCard,
-    getDueCards, getHistory, getCardHistory, addReview, removeLastReview, getStats,
-    getExperimentStats, exportData, importData,
+    getDueCards, getDueCountByTag, getHistory, getCardHistory, addReview, removeLastReview, getStats,
+    getExperimentStats, exportData, importData, getAllTags,
   };
 })();
 

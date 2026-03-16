@@ -9,11 +9,13 @@ const App = (() => {
   let cardSearchQuery = '';
   let cardFilterState = 'all';
   let cardSortOrder = 'created-desc';
+  let tagFilter = ''; // empty means all
   let createMode = 'single';
   let previewVisible = false;
   let sessionRatings = []; // Track ratings for session summary
   let expandedCardId = null; // Currently expanded card in card list
   let undoStack = []; // Stack of {cardSnapshot, rating} for undo during review
+  let reviewTagFilter = ''; // Tag filter for review sessions (empty = all)
 
   // --- DOM helpers ---
 
@@ -42,17 +44,62 @@ const App = (() => {
     $('#stat-streak').textContent = stats.streak;
     $('#stat-mature').textContent = stats.mature;
 
+    renderDashboardTagFilter();
+
+    // Count due cards for current filter
+    const filteredDue = reviewTagFilter
+      ? Storage.getDueCards(new Date(), reviewTagFilter).length
+      : stats.due;
+
     const startBtn = $('#start-review-btn');
-    if (stats.due > 0) {
-      startBtn.textContent = `Review ${stats.due} card${stats.due > 1 ? 's' : ''}`;
+    if (filteredDue > 0) {
+      const tagLabel = reviewTagFilter ? ` [${reviewTagFilter}]` : '';
+      startBtn.textContent = `Review ${filteredDue} card${filteredDue > 1 ? 's' : ''}${tagLabel}`;
       startBtn.disabled = false;
     } else {
-      startBtn.textContent = 'No cards due';
+      startBtn.textContent = reviewTagFilter ? `No ${reviewTagFilter} cards due` : 'No cards due';
       startBtn.disabled = true;
     }
   }
 
+  function renderDashboardTagFilter() {
+    const container = $('#dashboard-tag-filter');
+    if (!container) return;
+
+    const allTags = Storage.getAllTags();
+    const dueCounts = Storage.getDueCountByTag();
+
+    // Only show if there are tags with due cards, or if a filter is active
+    const tagsWithDue = allTags.filter(t => (dueCounts[t] || 0) > 0);
+    if (tagsWithDue.length === 0 && !reviewTagFilter) {
+      container.classList.add('hidden');
+      container.innerHTML = '';
+      return;
+    }
+
+    container.classList.remove('hidden');
+    let html = '<span class="dashboard-filter-label">Review by tag</span>';
+    html += `<button class="dashboard-tag-pill${reviewTagFilter === '' ? ' selected' : ''}" data-tag="" data-testid="review-tag-all">All</button>`;
+    allTags.forEach(tag => {
+      const count = dueCounts[tag] || 0;
+      const sel = reviewTagFilter === tag ? ' selected' : '';
+      const countBadge = count > 0 ? ` <span class="tag-due-count">${count}</span>` : '';
+      html += `<button class="dashboard-tag-pill${sel}" data-tag="${escapeHtml(tag)}" data-testid="review-tag-pill">${escapeHtml(tag)}${countBadge}</button>`;
+    });
+    container.innerHTML = html;
+  }
+
   // --- Create card ---
+
+  function parseTags(str) {
+    return str.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+  }
+
+  function tagColorClass(tag) {
+    let hash = 0;
+    for (let i = 0; i < tag.length; i++) hash = ((hash << 5) - hash) + tag.charCodeAt(i);
+    return 'tag-pill-color-' + (Math.abs(hash) % 8);
+  }
 
   function handleCreateCard(e) {
     e.preventDefault();
@@ -60,14 +107,15 @@ const App = (() => {
     const back = $('#card-back').value.trim();
     if (!front || !back) return;
 
-    Storage.createCard(front, back);
+    const tags = parseTags($('#card-tags')?.value || '');
+    Storage.createCard(front, back, tags);
     $('#card-front').value = '';
     $('#card-back').value = '';
+    if ($('#card-tags')) $('#card-tags').value = '';
     updatePreview();
     renderDashboard();
     renderCardList();
 
-    // Show toast
     showToast('Card created!');
   }
 
@@ -79,12 +127,13 @@ const App = (() => {
       .map(line => line.trim())
       .filter(line => line.length > 0)
       .map(line => {
-        const sep = line.indexOf('::');
-        if (sep === -1) return null;
-        const front = line.slice(0, sep).trim();
-        const back = line.slice(sep + 2).trim();
+        const parts = line.split('::');
+        if (parts.length < 2) return null;
+        const front = parts[0].trim();
+        const back = parts[1].trim();
         if (!front || !back) return null;
-        return { front, back };
+        const tags = parts.length >= 3 ? parseTags(parts[2]) : [];
+        return { front, back, tags };
       })
       .filter(Boolean);
   }
@@ -118,7 +167,7 @@ const App = (() => {
     const parsed = parseBulkInput($('#bulk-input').value);
     if (parsed.length === 0) return;
 
-    parsed.forEach(card => Storage.createCard(card.front, card.back));
+    parsed.forEach(card => Storage.createCard(card.front, card.back, card.tags));
 
     const count = parsed.length;
     $('#bulk-input').value = '';
@@ -181,7 +230,7 @@ const App = (() => {
   // --- Review ---
 
   function startReview() {
-    reviewQueue = Storage.getDueCards();
+    reviewQueue = Storage.getDueCards(new Date(), reviewTagFilter || undefined);
     if (reviewQueue.length === 0) return;
     sessionRatings = [];
     undoStack = [];
@@ -205,7 +254,8 @@ const App = (() => {
     $('#review-back').classList.add('hidden');
     $('#show-answer-btn').classList.remove('hidden');
     $('#rating-buttons').classList.add('hidden');
-    $('#review-progress').textContent = `${reviewQueue.length} card${reviewQueue.length > 1 ? 's' : ''} remaining`;
+    const tagLabel = reviewTagFilter ? ` · ${reviewTagFilter}` : '';
+    $('#review-progress').textContent = `${reviewQueue.length} card${reviewQueue.length > 1 ? 's' : ''} remaining${tagLabel}`;
 
     // Show/hide undo button
     const undoBtn = $('#undo-btn');
@@ -361,11 +411,19 @@ const App = (() => {
       filtered = filtered.filter(c => c.state === 'review' && c.interval >= 21);
     }
 
+    // Apply tag filter
+    if (tagFilter) {
+      filtered = filtered.filter(c =>
+        Array.isArray(c.tags) && c.tags.includes(tagFilter)
+      );
+    }
+
     // Apply search query
     if (cardSearchQuery) {
       const q = cardSearchQuery.toLowerCase();
       filtered = filtered.filter(c =>
-        c.front.toLowerCase().includes(q) || c.back.toLowerCase().includes(q)
+        c.front.toLowerCase().includes(q) || c.back.toLowerCase().includes(q) ||
+        (Array.isArray(c.tags) && c.tags.some(t => t.includes(q)))
       );
     }
 
@@ -402,8 +460,31 @@ const App = (() => {
     return sorted;
   }
 
+  function renderTagFilters() {
+    const allTags = Storage.getAllTags();
+    const container = $('#tag-filters');
+    if (!container) return;
+
+    if (allTags.length === 0) {
+      container.classList.add('hidden');
+      container.innerHTML = '';
+      tagFilter = '';
+      return;
+    }
+
+    container.classList.remove('hidden');
+    let html = '<span class="tag-filter-label">Tags</span>';
+    html += `<button class="tag-filter-pill${tagFilter === '' ? ' selected' : ''}" data-tag="" data-testid="tag-filter-all">All</button>`;
+    allTags.forEach(tag => {
+      const sel = tagFilter === tag ? ' selected' : '';
+      html += `<button class="tag-filter-pill${sel}" data-tag="${escapeHtml(tag)}" data-testid="tag-filter-pill">${escapeHtml(tag)}</button>`;
+    });
+    container.innerHTML = html;
+  }
+
   function renderCardList() {
     const allCards = Storage.getCards();
+    renderTagFilters();
     const filtered = sortCards(filterCards(allCards));
     const list = $('#card-list');
     const countEl = $('#card-count');
@@ -494,12 +575,18 @@ const App = (() => {
         `;
       }
 
+      const cardTags = Array.isArray(card.tags) ? card.tags : [];
+      const tagPillsHtml = cardTags.length > 0
+        ? `<div class="card-row-tags" data-testid="card-row-tags">${cardTags.map(t => `<span class="tag-pill ${tagColorClass(t)}" data-testid="tag-pill">${escapeHtml(t)}</span>`).join('')}</div>`
+        : '';
+
       row.innerHTML = `
         <div class="card-row-header" data-testid="card-row-header">
           <span class="card-chevron">${chevron}</span>
           <div class="card-row-content">
             <strong>${escapeHtml(card.front)}</strong>
             <span class="badge ${stateClass}">${stateLabel}</span>
+            ${tagPillsHtml}
           </div>
           <div class="card-row-meta">
             ${card.state !== 'new' ? `${formatInterval(card.interval)}` : 'New'}
@@ -810,6 +897,9 @@ const App = (() => {
     $('#edit-card-id').value = card.id;
     $('#edit-front').value = card.front;
     $('#edit-back').value = card.back;
+    if ($('#edit-tags')) {
+      $('#edit-tags').value = Array.isArray(card.tags) ? card.tags.join(', ') : '';
+    }
     $('#edit-modal').classList.remove('hidden');
     $('#edit-front').focus();
   }
@@ -939,6 +1029,7 @@ const App = (() => {
       if (card) {
         card.front = front;
         card.back = back;
+        card.tags = parseTags($('#edit-tags')?.value || '');
         Storage.saveCard(card);
         closeEditModal();
         renderCardList();
@@ -968,6 +1059,22 @@ const App = (() => {
         cardFilterState = pill.dataset.filter;
         renderCardList();
       });
+    });
+
+    // Tag filter (delegated — pills are re-rendered)
+    $('#tag-filters')?.addEventListener('click', (e) => {
+      const pill = e.target.closest('.tag-filter-pill');
+      if (!pill) return;
+      tagFilter = pill.dataset.tag || '';
+      renderCardList();
+    });
+
+    // Dashboard tag filter for review (delegated — pills are re-rendered)
+    $('#dashboard-tag-filter')?.addEventListener('click', (e) => {
+      const pill = e.target.closest('.dashboard-tag-pill');
+      if (!pill) return;
+      reviewTagFilter = pill.dataset.tag || '';
+      renderDashboard();
     });
 
     // Export/Import

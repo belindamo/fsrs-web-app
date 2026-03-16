@@ -41,6 +41,7 @@
           <div class="stat-label">Mature</div>
         </div>
       </div>
+      <div id="dashboard-tag-filter" class="dashboard-tag-filter hidden" data-testid="dashboard-tag-filter"></div>
       <button id="start-review-btn" class="btn btn-primary" data-testid="start-review-btn" disabled>
         No cards due
       </button>
@@ -64,6 +65,10 @@
             <label for="card-back">Back</label>
             <textarea id="card-back" data-testid="card-back" placeholder="Answer... (supports **bold**, `code`, ```code blocks```)" rows="3"></textarea>
           </div>
+          <div class="form-group">
+            <label for="card-tags">Tags</label>
+            <input type="text" id="card-tags" data-testid="card-tags" placeholder="e.g. math, algebra, chapter-1" autocomplete="off">
+          </div>
           <div id="create-preview" class="create-preview hidden" data-testid="create-preview">
             <div class="preview-label">Preview</div>
             <div class="preview-card">
@@ -82,8 +87,8 @@
       <!-- Bulk card creation -->
       <div id="create-bulk" class="hidden" data-testid="create-bulk">
         <div class="form-group">
-          <label for="bulk-input">Paste cards — one per line, front and back separated by <code>::</code></label>
-          <textarea id="bulk-input" data-testid="bulk-input" placeholder="What is 2+2? :: 4&#10;Capital of France? :: Paris&#10;H2O stands for? :: Water" rows="10"></textarea>
+          <label for="bulk-input">Paste cards — one per line, <code>front :: back</code> or <code>front :: back :: tags</code></label>
+          <textarea id="bulk-input" data-testid="bulk-input" placeholder="What is 2+2? :: 4 :: math&#10;Capital of France? :: Paris :: geography&#10;H2O stands for? :: Water :: chemistry, science" rows="10"></textarea>
         </div>
         <p id="bulk-preview" class="bulk-preview" data-testid="bulk-preview"></p>
         <button id="bulk-create-btn" class="btn btn-primary" data-testid="bulk-create-btn" disabled>Create Cards</button>
@@ -192,6 +197,7 @@
           </select>
         </div>
       </div>
+      <div id="tag-filters" class="tag-filters hidden" data-testid="tag-filters"></div>
       <p id="card-count" class="card-count" data-testid="card-count"></p>
       <div id="card-list" data-testid="card-list"></div>
     </div>
@@ -322,6 +328,10 @@
         <div class="form-group">
           <label for="edit-back">Back</label>
           <textarea id="edit-back" data-testid="edit-back" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="edit-tags">Tags</label>
+          <input type="text" id="edit-tags" data-testid="edit-tags" placeholder="e.g. math, algebra" autocomplete="off">
         </div>
         <div class="modal-actions">
           <button type="button" id="edit-cancel-btn" class="btn btn-secondary" data-testid="edit-cancel">Cancel</button>

@@ -4,6 +4,10 @@
 const Storage = (() => {
   const CARDS_KEY = 'fsrs_cards';
   const HISTORY_KEY = 'fsrs_history';
+  const SETTINGS_KEY = 'fsrs_settings';
+  const NEW_TODAY_KEY = 'fsrs_new_today';
+
+  const DEFAULT_SETTINGS = { newCardsPerDay: 20 };
 
   function load(key) {
     try {
@@ -15,6 +19,61 @@ const Storage = (() => {
 
   function save(key, data) {
     localStorage.setItem(key, JSON.stringify(data));
+  }
+
+  // --- Settings ---
+
+  function getSettings() {
+    try {
+      const stored = JSON.parse(localStorage.getItem(SETTINGS_KEY));
+      return { ...DEFAULT_SETTINGS, ...stored };
+    } catch {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  function saveSettings(settings) {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }
+
+  // --- New cards introduced today ---
+
+  function _todayKey() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function _getNewTodayData() {
+    try {
+      return JSON.parse(localStorage.getItem(NEW_TODAY_KEY)) || { date: '', count: 0 };
+    } catch {
+      return { date: '', count: 0 };
+    }
+  }
+
+  function getNewCardsIntroducedToday() {
+    const data = _getNewTodayData();
+    return data.date === _todayKey() ? data.count : 0;
+  }
+
+  function incrementNewCardsToday() {
+    const today = _todayKey();
+    const data = _getNewTodayData();
+    if (data.date !== today) {
+      localStorage.setItem(NEW_TODAY_KEY, JSON.stringify({ date: today, count: 1 }));
+    } else {
+      data.count++;
+      localStorage.setItem(NEW_TODAY_KEY, JSON.stringify(data));
+    }
+  }
+
+  function decrementNewCardsToday() {
+    const today = _todayKey();
+    const data = _getNewTodayData();
+    if (data.date === today && data.count > 0) {
+      data.count--;
+      localStorage.setItem(NEW_TODAY_KEY, JSON.stringify(data));
+    }
   }
 
   // --- Cards ---
@@ -229,6 +288,7 @@ const Storage = (() => {
     getCards, getCard, saveCard, deleteCard, createCard,
     getDueCards, getDueCountByTag, getHistory, getCardHistory, addReview, removeLastReview, getStats,
     getExperimentStats, exportData, importData, getAllTags,
+    getSettings, saveSettings, getNewCardsIntroducedToday, incrementNewCardsToday, decrementNewCardsToday,
   };
 })();
 

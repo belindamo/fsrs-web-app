@@ -11,6 +11,7 @@
     <header>
       <h1 data-testid="app-title">FSRS</h1>
       <p>Free Spaced Repetition Scheduler</p>
+      <button id="settings-btn" class="settings-btn" data-testid="settings-btn" aria-label="Settings">⚙</button>
     </header>
 
     <!-- Dashboard -->
@@ -313,6 +314,24 @@
       </div>
     </div>
   </div>
+
+    <!-- Settings -->
+    <div id="settings" class="view">
+      <h2 class="section-title">Settings</h2>
+      <div class="settings-section">
+        <div class="settings-row" data-testid="settings-new-cards">
+          <div class="settings-row-info">
+            <label for="settings-new-per-day" class="settings-label">New cards per day</label>
+            <p class="settings-desc">Limits how many unseen cards are introduced each day. Review cards are always shown.</p>
+          </div>
+          <input type="number" id="settings-new-per-day" data-testid="settings-new-per-day"
+            class="settings-input" min="0" max="999" step="1" value="20">
+        </div>
+      </div>
+      <div class="settings-footer">
+        <p class="settings-today-info" id="settings-today-info" data-testid="settings-today-info"></p>
+      </div>
+    </div>
 
   <!-- Edit Modal -->
   <div id="edit-modal" class="modal hidden" data-testid="edit-modal">

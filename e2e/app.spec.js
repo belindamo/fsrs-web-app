@@ -1918,4 +1918,110 @@ test.describe('FSRS Web App', () => {
     const sciPill = page.getByTestId('review-tag-pill').filter({ hasText: 'science' });
     await expect(sciPill).toContainText('1');
   });
+
+  // === Settings & New Card Limit ===
+
+  test('can open settings view via gear button', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    // Settings view should be visible
+    await expect(page.locator('#settings')).toHaveClass(/active/);
+
+    // Default new cards per day is 20
+    await expect(page.getByTestId('settings-new-per-day')).toHaveValue('20');
+
+    // Today info should be visible
+    await expect(page.getByTestId('settings-today-info')).toContainText('0 of 20');
+  });
+
+  test('can change new cards per day setting', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    // Change to 5
+    const input = page.getByTestId('settings-new-per-day');
+    await input.fill('5');
+    await input.dispatchEvent('change');
+
+    // Toast should confirm
+    await expect(page.getByTestId('toast')).toHaveText('Setting saved');
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-new-per-day')).toHaveValue('5');
+  });
+
+  test('new card limit restricts review queue', async ({ page }) => {
+    await page.goto('/');
+
+    // Set limit to 2
+    await page.getByTestId('settings-btn').click();
+    const input = page.getByTestId('settings-new-per-day');
+    await input.fill('2');
+    await input.dispatchEvent('change');
+
+    // Create 4 new cards
+    await page.getByTestId('nav-create').click();
+    for (let i = 1; i <= 4; i++) {
+      await page.getByTestId('card-front').fill(`Limit Q${i}`);
+      await page.getByTestId('card-back').fill(`Limit A${i}`);
+      await page.getByTestId('create-card-btn').click();
+    }
+
+    // Dashboard should show only 2 cards available (limited by new card cap)
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('start-review-btn')).toContainText('2 cards');
+
+    // Total due stat still shows all 4
+    await expect(page.getByTestId('stat-due')).toHaveText('4');
+  });
+
+  test('new card limit counter updates after reviewing new cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Set limit to 1
+    await page.getByTestId('settings-btn').click();
+    const input = page.getByTestId('settings-new-per-day');
+    await input.fill('1');
+    await input.dispatchEvent('change');
+
+    // Create 2 new cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('LimitA');
+    await page.getByTestId('card-back').fill('AnswerA');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('LimitB');
+    await page.getByTestId('card-back').fill('AnswerB');
+    await page.getByTestId('create-card-btn').click();
+
+    // Dashboard should show 1 card available
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('start-review-btn')).toContainText('1 card');
+
+    // Review the one card
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Now dashboard should show no cards due (limit exhausted)
+    await expect(page.getByTestId('start-review-btn')).toBeDisabled();
+
+    // Settings should show 1 of 1 introduced
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-today-info')).toContainText('1 of 1');
+  });
+
+  test('navigating away from settings re-selects nav button', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+    await expect(page.locator('#settings')).toHaveClass(/active/);
+
+    // Click nav to go back to dashboard
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.locator('#dashboard')).toHaveClass(/active/);
+  });
 });

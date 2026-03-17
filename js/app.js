@@ -35,6 +35,16 @@ const App = (() => {
 
   // --- Dashboard ---
 
+  function getEffectiveDueCount(tag) {
+    const allDue = Storage.getDueCards(new Date(), tag || undefined);
+    const settings = Storage.getSettings();
+    const introduced = Storage.getNewCardsIntroducedToday();
+    const remaining = Math.max(0, settings.newCardsPerDay - introduced);
+    const newCards = allDue.filter(c => c.state === 'new');
+    const reviewCards = allDue.filter(c => c.state !== 'new');
+    return reviewCards.length + Math.min(newCards.length, remaining);
+  }
+
   function renderDashboard() {
     const stats = Storage.getStats();
     $('#stat-total').textContent = stats.total;
@@ -46,15 +56,13 @@ const App = (() => {
 
     renderDashboardTagFilter();
 
-    // Count due cards for current filter
-    const filteredDue = reviewTagFilter
-      ? Storage.getDueCards(new Date(), reviewTagFilter).length
-      : stats.due;
+    // Count effective due cards (respecting new-card-per-day limit)
+    const effectiveDue = getEffectiveDueCount(reviewTagFilter);
 
     const startBtn = $('#start-review-btn');
-    if (filteredDue > 0) {
+    if (effectiveDue > 0) {
       const tagLabel = reviewTagFilter ? ` [${reviewTagFilter}]` : '';
-      startBtn.textContent = `Review ${filteredDue} card${filteredDue > 1 ? 's' : ''}${tagLabel}`;
+      startBtn.textContent = `Review ${effectiveDue} card${effectiveDue > 1 ? 's' : ''}${tagLabel}`;
       startBtn.disabled = false;
     } else {
       startBtn.textContent = reviewTagFilter ? `No ${reviewTagFilter} cards due` : 'No cards due';
@@ -230,7 +238,17 @@ const App = (() => {
   // --- Review ---
 
   function startReview() {
-    reviewQueue = Storage.getDueCards(new Date(), reviewTagFilter || undefined);
+    const allDue = Storage.getDueCards(new Date(), reviewTagFilter || undefined);
+    if (allDue.length === 0) return;
+
+    // Apply new-cards-per-day limit
+    const settings = Storage.getSettings();
+    const introduced = Storage.getNewCardsIntroducedToday();
+    const remaining = Math.max(0, settings.newCardsPerDay - introduced);
+    const newCards = allDue.filter(c => c.state === 'new').slice(0, remaining);
+    const reviewCards = allDue.filter(c => c.state !== 'new');
+    reviewQueue = [...reviewCards, ...newCards];
+
     if (reviewQueue.length === 0) return;
     sessionRatings = [];
     undoStack = [];
@@ -296,6 +314,7 @@ const App = (() => {
 
     // Save snapshot for undo before modifying anything
     const cardSnapshot = { ...currentCard };
+    const wasNew = currentCard.state === 'new';
 
     const now = new Date();
     const elapsed = currentCard.lastReview
@@ -312,8 +331,13 @@ const App = (() => {
     Storage.addReview(currentCard.id, rating, elapsed, updated.interval, currentCard.algorithm, predictedR);
     sessionRatings.push(rating);
 
+    // Track new card introductions for daily limit
+    if (wasNew) {
+      Storage.incrementNewCardsToday();
+    }
+
     // Push to undo stack
-    undoStack.push({ cardSnapshot, rating });
+    undoStack.push({ cardSnapshot, rating, wasNew });
 
     reviewQueue.shift();
     showNextCard();
@@ -332,6 +356,11 @@ const App = (() => {
 
     // Remove the last session rating
     sessionRatings.pop();
+
+    // Decrement new card counter if this was a new card
+    if (last.wasNew) {
+      Storage.decrementNewCardsToday();
+    }
 
     // Put the card back at the front of the review queue
     reviewQueue.unshift(last.cardSnapshot);
@@ -944,6 +973,30 @@ const App = (() => {
     setTimeout(() => toast.classList.remove('show'), 2000);
   }
 
+  // --- Settings ---
+
+  function renderSettings() {
+    const settings = Storage.getSettings();
+    const input = $('#settings-new-per-day');
+    if (input) input.value = settings.newCardsPerDay;
+
+    const info = $('#settings-today-info');
+    if (info) {
+      const introduced = Storage.getNewCardsIntroducedToday();
+      const limit = settings.newCardsPerDay;
+      info.textContent = `${introduced} of ${limit} new cards introduced today`;
+    }
+  }
+
+  function showSettings() {
+    show('settings');
+    renderSettings();
+    // Highlight gear button
+    $('#settings-btn')?.classList.add('active');
+    // Deselect all nav buttons since settings isn't in the nav
+    $$('nav button').forEach(b => b.classList.remove('selected'));
+  }
+
   // --- Init ---
 
   function init() {
@@ -952,11 +1005,25 @@ const App = (() => {
       btn.addEventListener('click', () => {
         const view = btn.dataset.view;
         show(view);
+        $('#settings-btn')?.classList.remove('active');
         if (view === 'dashboard') renderDashboard();
         if (view === 'cards') renderCardList();
         if (view === 'create') {}
         if (view === 'stats') renderStats();
       });
+    });
+
+    // Settings
+    $('#settings-btn')?.addEventListener('click', showSettings);
+
+    $('#settings-new-per-day')?.addEventListener('change', (e) => {
+      const val = Math.max(0, Math.min(999, parseInt(e.target.value) || 0));
+      e.target.value = val;
+      const settings = Storage.getSettings();
+      settings.newCardsPerDay = val;
+      Storage.saveSettings(settings);
+      renderSettings();
+      showToast('Setting saved');
     });
 
     // Create mode tabs

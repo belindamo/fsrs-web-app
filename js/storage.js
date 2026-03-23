@@ -7,7 +7,7 @@ const Storage = (() => {
   const SETTINGS_KEY = 'fsrs_settings';
   const NEW_TODAY_KEY = 'fsrs_new_today';
 
-  const DEFAULT_SETTINGS = { newCardsPerDay: 20 };
+  const DEFAULT_SETTINGS = { newCardsPerDay: 20, leechThreshold: 8, desiredRetention: 0.9 };
 
   function load(key) {
     try {
@@ -123,6 +123,7 @@ const Storage = (() => {
       lapses: 0,
       state: 'new',
       createdAt: new Date().toISOString(),
+      suspended: false,
       // BetterFSRS extra state (initialized for all cards, only used by betterfsrs)
       streak: 0,
       difficultyEma: 5.0,
@@ -135,8 +136,18 @@ const Storage = (() => {
 
   // --- Due cards ---
 
+  function suspendCard(id) {
+    const card = getCard(id);
+    if (card) { card.suspended = true; saveCard(card); }
+  }
+
+  function unsuspendCard(id) {
+    const card = getCard(id);
+    if (card) { card.suspended = false; saveCard(card); }
+  }
+
   function getDueCards(now = new Date(), tag) {
-    let cards = getCards().filter(c => new Date(c.due) <= now);
+    let cards = getCards().filter(c => new Date(c.due) <= now && !c.suspended);
     if (tag) {
       cards = cards.filter(c => Array.isArray(c.tags) && c.tags.includes(tag));
     }
@@ -193,10 +204,12 @@ const Storage = (() => {
     const cards = getCards();
     const history = getHistory();
     const now = new Date();
-    const due = cards.filter(c => new Date(c.due) <= now).length;
-    const newCards = cards.filter(c => c.state === 'new').length;
-    const mature = cards.filter(c => c.state === 'review' && c.interval >= 21).length;
-    const young = cards.filter(c => c.state === 'review' && c.interval < 21).length;
+    const active = cards.filter(c => !c.suspended);
+    const due = active.filter(c => new Date(c.due) <= now).length;
+    const newCards = active.filter(c => c.state === 'new').length;
+    const mature = active.filter(c => c.state === 'review' && c.interval >= 21).length;
+    const young = active.filter(c => c.state === 'review' && c.interval < 21).length;
+    const suspended = cards.filter(c => c.suspended).length;
 
     // Reviews today
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -220,7 +233,7 @@ const Storage = (() => {
       }
     }
 
-    return { total: cards.length, due, newCards, mature, young, reviewsToday, streak };
+    return { total: cards.length, due, newCards, mature, young, suspended, reviewsToday, streak };
   }
 
   // --- Experiment stats ---
@@ -286,6 +299,7 @@ const Storage = (() => {
 
   return {
     getCards, getCard, saveCard, deleteCard, createCard,
+    suspendCard, unsuspendCard,
     getDueCards, getDueCountByTag, getHistory, getCardHistory, addReview, removeLastReview, getStats,
     getExperimentStats, exportData, importData, getAllTags,
     getSettings, saveSettings, getNewCardsIntroducedToday, incrementNewCardsToday, decrementNewCardsToday,

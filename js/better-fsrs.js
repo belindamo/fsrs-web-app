@@ -237,7 +237,7 @@ const BetterFSRS = (() => {
       d = initDifficulty(rating, w);
       elapsed = 0;
 
-      const interval = optimalInterval(s, d, 0.9, w);
+      const interval = optimalInterval(s, d, _desiredRetention, w);
       const due = new Date(now.getTime() + interval * 24 * 60 * 60 * 1000);
 
       const recalled = rating >= 2;
@@ -289,7 +289,7 @@ const BetterFSRS = (() => {
       lapses = (card.lapses || 0) + 1;
     }
 
-    const interval = optimalInterval(s, d, 0.9, w);
+    const interval = optimalInterval(s, d, _desiredRetention, w);
     const due = new Date(now.getTime() + interval * 24 * 60 * 60 * 1000);
 
     // Update error EMA
@@ -328,7 +328,17 @@ const BetterFSRS = (() => {
     return result;
   }
 
-  return { review, previewRatings, predictRecall, retrievability, optimalInterval, DEFAULT_W };
+  let _desiredRetention = 0.9;
+
+  function setDesiredRetention(r) {
+    _desiredRetention = Math.max(0.7, Math.min(0.97, r));
+  }
+
+  function getDesiredRetention() {
+    return _desiredRetention;
+  }
+
+  return { review, previewRatings, predictRecall, retrievability, optimalInterval, setDesiredRetention, getDesiredRetention, DEFAULT_W };
 })();
 
 if (typeof module !== 'undefined') module.exports = BetterFSRS;

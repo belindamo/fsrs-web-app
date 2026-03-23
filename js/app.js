@@ -16,6 +16,9 @@ const App = (() => {
   let expandedCardId = null; // Currently expanded card in card list
   let undoStack = []; // Stack of {cardSnapshot, rating} for undo during review
   let reviewTagFilter = ''; // Tag filter for review sessions (empty = all)
+  let sessionStartTime = null; // Timestamp when review session started
+  let cardStartTime = null; // Timestamp when current card was shown
+  let cardTimes = []; // Array of per-card review times in ms
 
   // --- DOM helpers ---
 
@@ -252,6 +255,9 @@ const App = (() => {
     if (reviewQueue.length === 0) return;
     sessionRatings = [];
     undoStack = [];
+    cardTimes = [];
+    sessionStartTime = Date.now();
+    cardStartTime = null;
     // Show active review, hide summary
     $('#review-active').classList.remove('hidden');
     $('#review-summary').classList.add('hidden');
@@ -266,6 +272,7 @@ const App = (() => {
     }
     currentCard = reviewQueue[0];
     answerRevealed = false;
+    cardStartTime = Date.now();
 
     renderMarkdown($('#review-front'), currentCard.front);
     $('#review-back').innerHTML = '';
@@ -331,6 +338,11 @@ const App = (() => {
     Storage.addReview(currentCard.id, rating, elapsed, updated.interval, currentCard.algorithm, predictedR);
     sessionRatings.push(rating);
 
+    // Record per-card review time
+    if (cardStartTime) {
+      cardTimes.push(Date.now() - cardStartTime);
+    }
+
     // Track new card introductions for daily limit
     if (wasNew) {
       Storage.incrementNewCardsToday();
@@ -339,25 +351,17 @@ const App = (() => {
     // Push to undo stack
     undoStack.push({ cardSnapshot, rating, wasNew });
 
-    reviewQueue.shift();
-    showNextCard();
-  }
+    // Leech detection: if rating was Again and lapses hit threshold, auto-suspend
+    const settings = Storage.getSettings();
+    if (rating === 1 && settings.leechThreshold > 0) {
+      const freshCard = Storage.getCard(currentCard.id);
+      if (freshCard && (freshCard.lapses || 0) >= settings.leechThreshold && !freshCard.suspended) {
+        Storage.suspendCard(freshCard.id);
+        showToast(`Leech detected! Card suspended (${freshCard.lapses} lapses)`);
+      }
+    }
 
-  function undoLastRating() {
-    if (undoStack.length === 0) return;
-
-    const last = undoStack.pop();
-
-    // Restore the card to its pre-review state
-    Storage.saveCard(last.cardSnapshot);
-
-    // Remove the last review log entry for this card
-    Storage.removeLastReview(last.cardSnapshot.id);
-
-    // Remove the last session rating
-    sessionRatings.pop();
-
-    // Decrement new card counter if this was a new card
+    // Decrement counter if this was a new card
     if (last.wasNew) {
       Storage.decrementNewCardsToday();
     }
@@ -384,6 +388,14 @@ const App = (() => {
     showSessionSummary();
   }
 
+  function formatDuration(ms) {
+    const totalSec = Math.round(ms / 1000);
+    if (totalSec < 60) return `${totalSec}s`;
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
+  }
+
   function showSessionSummary() {
     // Hide the active review UI, show summary
     $('#review-active').classList.add('hidden');
@@ -398,6 +410,26 @@ const App = (() => {
     $('#summary-hard-count').textContent = counts[2];
     $('#summary-good-count').textContent = counts[3];
     $('#summary-easy-count').textContent = counts[4];
+
+    // Session timing stats
+    const sessionElapsed = sessionStartTime ? Date.now() - sessionStartTime : 0;
+    const avgTime = cardTimes.length > 0
+      ? cardTimes.reduce((a, b) => a + b, 0) / cardTimes.length
+      : 0;
+    const fastest = cardTimes.length > 0 ? Math.min(...cardTimes) : 0;
+    const slowest = cardTimes.length > 0 ? Math.max(...cardTimes) : 0;
+
+    const durationEl = $('#summary-duration');
+    if (durationEl) durationEl.textContent = formatDuration(sessionElapsed);
+
+    const avgEl = $('#summary-avg-time');
+    if (avgEl) avgEl.textContent = formatDuration(avgTime);
+
+    const fastEl = $('#summary-fastest');
+    if (fastEl) fastEl.textContent = formatDuration(fastest);
+
+    const slowEl = $('#summary-slowest');
+    if (slowEl) slowEl.textContent = formatDuration(slowest);
 
     // Show/hide undo button on summary screen
     const summaryUndo = $('#summary-undo-btn');
@@ -418,8 +450,14 @@ const App = (() => {
   // --- Card list ---
 
   function getCardState(card) {
+    if (card.suspended) return 'suspended';
     if (card.state === 'new') return 'new';
     return card.interval >= 21 ? 'mature' : 'young';
+  }
+
+  function isLeech(card) {
+    const settings = Storage.getSettings();
+    return settings.leechThreshold > 0 && (card.lapses || 0) >= settings.leechThreshold;
   }
 
   function isCardDue(card) {
@@ -438,6 +476,8 @@ const App = (() => {
       filtered = filtered.filter(c => c.state === 'review' && c.interval < 21);
     } else if (cardFilterState === 'mature') {
       filtered = filtered.filter(c => c.state === 'review' && c.interval >= 21);
+    } else if (cardFilterState === 'suspended') {
+      filtered = filtered.filter(c => c.suspended);
     }
 
     // Apply tag filter
@@ -541,13 +581,19 @@ const App = (() => {
     filtered.forEach(card => {
       const row = document.createElement('div');
       const isExpanded = expandedCardId === card.id;
-      row.className = 'card-row' + (isExpanded ? ' expanded' : '');
+      row.className = 'card-row' + (isExpanded ? ' expanded' : '') + (card.suspended ? ' suspended' : '');
       row.setAttribute('data-testid', 'card-row');
       row.setAttribute('data-card-id', card.id);
 
       const state = getCardState(card);
-      const stateClass = state === 'new' ? 'badge-new' : state === 'mature' ? 'badge-mature' : 'badge-young';
-      const stateLabel = state === 'new' ? 'New' : state === 'mature' ? 'Mature' : 'Young';
+      const stateMap = {
+        'new': { cls: 'badge-new', label: 'New' },
+        'young': { cls: 'badge-young', label: 'Young' },
+        'mature': { cls: 'badge-mature', label: 'Mature' },
+        'suspended': { cls: 'badge-suspended', label: 'Suspended' },
+      };
+      const { cls: stateClass, label: stateLabel } = stateMap[state] || stateMap['young'];
+      const leechBadge = isLeech(card) ? ' <span class="badge badge-leech" data-testid="badge-leech">Leech</span>' : '';
 
       const chevron = isExpanded ? '▾' : '▸';
 
@@ -585,6 +631,8 @@ const App = (() => {
             </div>`;
         }
 
+        const suspendBtnLabel = card.suspended ? 'Unsuspend' : 'Suspend';
+        const suspendBtnAction = card.suspended ? 'unsuspend' : 'suspend';
         detailHtml = `
           <div class="card-detail" data-testid="card-detail">
             <div class="card-detail-answer">
@@ -598,6 +646,9 @@ const App = (() => {
               <div class="detail-chip"><span class="detail-chip-label">Stability</span><span class="detail-chip-value">${card.stability > 0 ? card.stability.toFixed(1) : '—'}</span></div>
               <div class="detail-chip"><span class="detail-chip-label">Difficulty</span><span class="detail-chip-value">${card.difficulty > 0 ? card.difficulty.toFixed(1) : '—'}</span></div>
               <div class="detail-chip"><span class="detail-chip-label">Next</span><span class="detail-chip-value">${card.state !== 'new' ? new Date(card.due).toLocaleDateString() : '—'}</span></div>
+            </div>
+            <div class="card-detail-actions">
+              <button class="btn-suspend suspend-card-btn" data-id="${card.id}" data-action="${suspendBtnAction}" data-testid="suspend-card-btn">${suspendBtnLabel}</button>
             </div>
             ${timelineHtml}
           </div>
@@ -614,7 +665,7 @@ const App = (() => {
           <span class="card-chevron">${chevron}</span>
           <div class="card-row-content">
             <strong>${escapeHtml(card.front)}</strong>
-            <span class="badge ${stateClass}">${stateLabel}</span>
+            <span class="badge ${stateClass}">${stateLabel}</span>${leechBadge}
             ${tagPillsHtml}
           </div>
           <div class="card-row-meta">
@@ -667,6 +718,9 @@ const App = (() => {
 
     // Reviews per day (last 14 days)
     renderReviewChart(history);
+
+    // Retention over time
+    renderRetentionChart(history);
 
     // Forecast (next 14 days)
     renderForecast();
@@ -853,6 +907,192 @@ const App = (() => {
     }
   }
 
+  // --- Retention over time ---
+
+  function renderRetentionChart(history) {
+    const canvas = $('#retention-chart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.parentElement.clientWidth;
+    const h = canvas.height = 180;
+    ctx.clearRect(0, 0, w, h);
+
+    const summaryEl = $('#retention-summary');
+
+    if (history.length === 0) {
+      if (summaryEl) summaryEl.textContent = 'No review data yet. Complete some reviews to see your retention trend.';
+      return;
+    }
+
+    // Group reviews into weekly buckets for the past 12 weeks
+    const WEEKS = 12;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Each bucket: { recalled: 0, total: 0 }
+    const buckets = [];
+    for (let i = 0; i < WEEKS; i++) buckets.push({ recalled: 0, total: 0 });
+
+    history.forEach(r => {
+      const ts = new Date(r.timestamp);
+      const daysAgo = Math.floor((todayStart - new Date(ts.getFullYear(), ts.getMonth(), ts.getDate())) / (1000 * 60 * 60 * 24));
+      const weekIdx = Math.floor(daysAgo / 7);
+      if (weekIdx >= 0 && weekIdx < WEEKS) {
+        const bucket = buckets[WEEKS - 1 - weekIdx]; // oldest first
+        bucket.total++;
+        if (r.rating >= 2) bucket.recalled++;
+      }
+    });
+
+    // Calculate retention rates (null for weeks with no data)
+    const retentions = buckets.map(b => b.total > 0 ? b.recalled / b.total : null);
+
+    // Find valid data points
+    const validPoints = retentions.map((r, i) => r !== null ? { idx: i, val: r } : null).filter(Boolean);
+
+    if (validPoints.length < 1) {
+      if (summaryEl) summaryEl.textContent = 'Not enough data yet. Keep reviewing!';
+      return;
+    }
+
+    // Chart dimensions
+    const padLeft = 40;
+    const padRight = 16;
+    const padTop = 24;
+    const padBottom = 28;
+    const chartW = w - padLeft - padRight;
+    const chartH = h - padTop - padBottom;
+
+    // Y-axis: 50% to 100%
+    const yMin = 0.5;
+    const yMax = 1.0;
+
+    function toX(i) { return padLeft + (i / (WEEKS - 1)) * chartW; }
+    function toY(val) { return padTop + (1 - (val - yMin) / (yMax - yMin)) * chartH; }
+
+    // Grid lines and Y labels
+    ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'right';
+
+    for (let pct = 50; pct <= 100; pct += 10) {
+      const y = toY(pct / 100);
+      ctx.beginPath();
+      ctx.moveTo(padLeft, y);
+      ctx.lineTo(w - padRight, y);
+      ctx.stroke();
+      ctx.fillText(`${pct}%`, padLeft - 4, y + 3);
+    }
+
+    // Desired retention reference line
+    const settings = Storage.getSettings();
+    const desiredR = settings.desiredRetention || 0.9;
+    if (desiredR >= yMin && desiredR <= yMax) {
+      const ry = toY(desiredR);
+      ctx.strokeStyle = 'rgba(99,102,241,0.4)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(padLeft, ry);
+      ctx.lineTo(w - padRight, ry);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(99,102,241,0.7)';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Target ${Math.round(desiredR * 100)}%`, padLeft + 4, ry - 4);
+    }
+
+    // X-axis labels
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < WEEKS; i++) {
+      const weeksAgo = WEEKS - 1 - i;
+      let label;
+      if (weeksAgo === 0) label = 'This wk';
+      else if (weeksAgo === 1) label = '1w ago';
+      else label = `${weeksAgo}w`;
+
+      // Only label every other week to avoid clutter
+      if (WEEKS <= 8 || i % 2 === 0 || i === WEEKS - 1) {
+        ctx.fillText(label, toX(i), h - 6);
+      }
+    }
+
+    // Draw area fill under the line
+    if (validPoints.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(toX(validPoints[0].idx), toY(validPoints[0].val));
+      for (let i = 1; i < validPoints.length; i++) {
+        ctx.lineTo(toX(validPoints[i].idx), toY(validPoints[i].val));
+      }
+      ctx.lineTo(toX(validPoints[validPoints.length - 1].idx), toY(yMin));
+      ctx.lineTo(toX(validPoints[0].idx), toY(yMin));
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(99,102,241,0.08)';
+      ctx.fill();
+    }
+
+    // Draw the line
+    if (validPoints.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(toX(validPoints[0].idx), toY(validPoints[0].val));
+      for (let i = 1; i < validPoints.length; i++) {
+        ctx.lineTo(toX(validPoints[i].idx), toY(validPoints[i].val));
+      }
+      ctx.strokeStyle = '#6366f1';
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+    }
+
+    // Draw data points
+    validPoints.forEach(p => {
+      const x = toX(p.idx);
+      const y = toY(p.val);
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#6366f1';
+      ctx.fill();
+      ctx.strokeStyle = '#1e1b4b';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Value label above point
+      const bucket = buckets[p.idx];
+      if (bucket.total >= 3) {
+        ctx.fillStyle = '#e2e8f0';
+        ctx.font = '10px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${Math.round(p.val * 100)}%`, x, y - 10);
+      }
+    });
+
+    // Summary text
+    if (summaryEl) {
+      const recentPoints = validPoints.filter(p => p.idx >= WEEKS - 4);
+      const olderPoints = validPoints.filter(p => p.idx < WEEKS - 4);
+      const recentAvg = recentPoints.length > 0
+        ? recentPoints.reduce((s, p) => s + p.val, 0) / recentPoints.length : null;
+      const olderAvg = olderPoints.length > 0
+        ? olderPoints.reduce((s, p) => s + p.val, 0) / olderPoints.length : null;
+
+      const totalRecalled = buckets.reduce((s, b) => s + b.recalled, 0);
+      const totalReviews = buckets.reduce((s, b) => s + b.total, 0);
+      const overallR = totalReviews > 0 ? Math.round((totalRecalled / totalReviews) * 100) : 0;
+
+      let trend = '';
+      if (recentAvg !== null && olderAvg !== null) {
+        const diff = Math.round((recentAvg - olderAvg) * 100);
+        if (diff > 2) trend = ` · Trending up (+${diff}pp)`;
+        else if (diff < -2) trend = ` · Trending down (${diff}pp)`;
+        else trend = ' · Stable';
+      }
+
+      summaryEl.textContent = `${overallR}% overall retention across ${totalReviews} reviews${trend}`;
+    }
+  }
+
   // --- Forecast ---
 
   function renderForecast() {
@@ -975,16 +1215,36 @@ const App = (() => {
 
   // --- Settings ---
 
+  function applyDesiredRetention(r) {
+    if (typeof FSRS !== 'undefined' && FSRS.setDesiredRetention) FSRS.setDesiredRetention(r);
+    if (typeof BetterFSRS !== 'undefined' && BetterFSRS.setDesiredRetention) BetterFSRS.setDesiredRetention(r);
+  }
+
   function renderSettings() {
     const settings = Storage.getSettings();
     const input = $('#settings-new-per-day');
     if (input) input.value = settings.newCardsPerDay;
 
+    const leechInput = $('#settings-leech-threshold');
+    if (leechInput) leechInput.value = settings.leechThreshold;
+
+    // Desired retention slider
+    const retSlider = $('#settings-desired-retention');
+    const retValue = $('#retention-value');
+    if (retSlider) {
+      const pct = Math.round((settings.desiredRetention || 0.9) * 100);
+      retSlider.value = pct;
+      if (retValue) retValue.textContent = pct + '%';
+    }
+
     const info = $('#settings-today-info');
     if (info) {
       const introduced = Storage.getNewCardsIntroducedToday();
       const limit = settings.newCardsPerDay;
-      info.textContent = `${introduced} of ${limit} new cards introduced today`;
+      const stats = Storage.getStats();
+      const suspendedInfo = stats.suspended > 0 ? ` · ${stats.suspended} suspended` : '';
+      const retPct = Math.round((settings.desiredRetention || 0.9) * 100);
+      info.textContent = `${introduced} of ${limit} new cards introduced today${suspendedInfo} · Target: ${retPct}% retention`;
     }
   }
 
@@ -997,9 +1257,35 @@ const App = (() => {
     $$('nav button').forEach(b => b.classList.remove('selected'));
   }
 
+  // --- Theme ---
+
+  function getTheme() {
+    return localStorage.getItem('fsrs_theme') || 'dark';
+  }
+
+  function setTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('fsrs_theme', theme);
+    updateThemeIcon(theme);
+  }
+
+  function updateThemeIcon(theme) {
+    const btn = $('#theme-toggle-btn');
+    if (btn) btn.textContent = theme === 'dark' ? '🌙' : '☀️';
+  }
+
+  function toggleTheme() {
+    const current = getTheme();
+    setTheme(current === 'dark' ? 'light' : 'dark');
+  }
+
   // --- Init ---
 
   function init() {
+    // Theme toggle
+    updateThemeIcon(getTheme());
+    $('#theme-toggle-btn')?.addEventListener('click', toggleTheme);
+
     // Nav
     $$('nav button').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1025,6 +1311,37 @@ const App = (() => {
       renderSettings();
       showToast('Setting saved');
     });
+
+    $('#settings-leech-threshold')?.addEventListener('change', (e) => {
+      const val = Math.max(0, Math.min(99, parseInt(e.target.value) || 0));
+      e.target.value = val;
+      const settings = Storage.getSettings();
+      settings.leechThreshold = val;
+      Storage.saveSettings(settings);
+      renderSettings();
+      showToast(val > 0 ? `Leech threshold set to ${val} lapses` : 'Leech detection disabled');
+    });
+
+    // Desired retention slider
+    const retSlider = $('#settings-desired-retention');
+    if (retSlider) {
+      retSlider.addEventListener('input', (e) => {
+        const pct = parseInt(e.target.value);
+        const retValue = $('#retention-value');
+        if (retValue) retValue.textContent = pct + '%';
+      });
+      retSlider.addEventListener('change', (e) => {
+        const pct = Math.max(70, Math.min(97, parseInt(e.target.value) || 90));
+        e.target.value = pct;
+        const r = pct / 100;
+        const settings = Storage.getSettings();
+        settings.desiredRetention = r;
+        Storage.saveSettings(settings);
+        applyDesiredRetention(r);
+        renderSettings();
+        showToast(`Target retention set to ${pct}%`);
+      });
+    }
 
     // Create mode tabs
     $$('.create-tab').forEach(tab => {
@@ -1069,6 +1386,21 @@ const App = (() => {
       const editBtn = e.target.closest('.edit-card-btn');
       if (editBtn) {
         openEditModal(editBtn.dataset.id);
+        return;
+      }
+
+      const suspendBtn = e.target.closest('.suspend-card-btn');
+      if (suspendBtn) {
+        const id = suspendBtn.dataset.id;
+        if (suspendBtn.dataset.action === 'suspend') {
+          Storage.suspendCard(id);
+          showToast('Card suspended');
+        } else {
+          Storage.unsuspendCard(id);
+          showToast('Card unsuspended');
+        }
+        renderCardList();
+        renderDashboard();
         return;
       }
 
@@ -1204,12 +1536,16 @@ const App = (() => {
       }
     });
 
+    // Apply saved desired retention to schedulers
+    const savedSettings = Storage.getSettings();
+    applyDesiredRetention(savedSettings.desiredRetention || 0.9);
+
     // Initial render
     renderDashboard();
     show('dashboard');
   }
 
-  return { init };
+  return { init, showToast };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

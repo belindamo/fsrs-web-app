@@ -1,16 +1,31 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FSRS — Spaced Repetition</title>
+  <meta name="description" content="Free Spaced Repetition Scheduler — learn anything with science-backed spacing">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/style.css">
+  <script>
+    // Apply saved theme immediately to avoid flash
+    (function() {
+      var t = localStorage.getItem('fsrs_theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
     <header>
       <h1 data-testid="app-title">FSRS</h1>
       <p>Free Spaced Repetition Scheduler</p>
+      <button id="theme-toggle-btn" class="theme-toggle-btn" data-testid="theme-toggle-btn" aria-label="Toggle theme">🌙</button>
       <button id="settings-btn" class="settings-btn" data-testid="settings-btn" aria-label="Settings">⚙</button>
     </header>
 
@@ -144,6 +159,24 @@
             <div class="summary-stat-value" id="summary-total" data-testid="summary-total">0</div>
             <div class="summary-stat-label">Cards Reviewed</div>
           </div>
+          <div class="summary-stat">
+            <div class="summary-stat-value" id="summary-duration" data-testid="summary-duration">0s</div>
+            <div class="summary-stat-label">Duration</div>
+          </div>
+        </div>
+        <div class="summary-timing" data-testid="summary-timing">
+          <div class="timing-stat">
+            <span class="timing-label">Avg per card</span>
+            <span class="timing-value" id="summary-avg-time" data-testid="summary-avg-time">0s</span>
+          </div>
+          <div class="timing-stat">
+            <span class="timing-label">Fastest</span>
+            <span class="timing-value" id="summary-fastest" data-testid="summary-fastest">0s</span>
+          </div>
+          <div class="timing-stat">
+            <span class="timing-label">Slowest</span>
+            <span class="timing-value" id="summary-slowest" data-testid="summary-slowest">0s</span>
+          </div>
         </div>
         <div class="summary-breakdown" data-testid="summary-breakdown">
           <div class="summary-row" data-testid="summary-again">
@@ -186,6 +219,7 @@
             <button class="filter-pill" data-filter="new" data-testid="filter-new">New</button>
             <button class="filter-pill" data-filter="young" data-testid="filter-young">Young</button>
             <button class="filter-pill" data-filter="mature" data-testid="filter-mature">Mature</button>
+            <button class="filter-pill" data-filter="suspended" data-testid="filter-suspended">Suspended</button>
           </div>
           <select id="card-sort" data-testid="card-sort" class="sort-select">
             <option value="created-desc">Newest</option>
@@ -260,6 +294,13 @@
         </div>
       </div>
       <div class="stats-section">
+        <h3>Retention Over Time</h3>
+        <div class="chart-container">
+          <canvas id="retention-chart" data-testid="retention-chart"></canvas>
+        </div>
+        <p id="retention-summary" class="retention-summary" data-testid="retention-summary"></p>
+      </div>
+      <div class="stats-section">
         <h3>Forecast (Next 14 Days)</h3>
         <div id="forecast-container" data-testid="forecast-container">
           <div id="forecast-bars" class="forecast-bars" data-testid="forecast-bars"></div>
@@ -327,6 +368,25 @@
           <input type="number" id="settings-new-per-day" data-testid="settings-new-per-day"
             class="settings-input" min="0" max="999" step="1" value="20">
         </div>
+        <div class="settings-row" data-testid="settings-leech">
+          <div class="settings-row-info">
+            <label for="settings-leech-threshold" class="settings-label">Leech threshold</label>
+            <p class="settings-desc">Auto-suspend cards after this many lapses. Set to 0 to disable.</p>
+          </div>
+          <input type="number" id="settings-leech-threshold" data-testid="settings-leech-threshold"
+            class="settings-input" min="0" max="99" step="1" value="8">
+        </div>
+        <div class="settings-row" data-testid="settings-retention">
+          <div class="settings-row-info">
+            <label for="settings-desired-retention" class="settings-label">Desired retention</label>
+            <p class="settings-desc">Target probability of recalling a card when it's due. Higher = more reviews, better memory. Lower = fewer reviews, more forgetting.</p>
+          </div>
+          <div class="retention-control">
+            <input type="range" id="settings-desired-retention" data-testid="settings-desired-retention"
+              class="retention-slider" min="70" max="97" step="1" value="90">
+            <span id="retention-value" class="retention-value" data-testid="retention-value">90%</span>
+          </div>
+        </div>
       </div>
       <div class="settings-footer">
         <p class="settings-today-info" id="settings-today-info" data-testid="settings-today-info"></p>
@@ -387,11 +447,21 @@
     </button>
   </nav>
 
+  <!-- PWA install banner -->
+  <div id="pwa-install-banner" class="pwa-install-banner hidden" data-testid="pwa-install-banner">
+    <span class="pwa-install-text">Install FSRS for offline access</span>
+    <div class="pwa-install-actions">
+      <button id="pwa-install-btn" class="btn btn-primary btn-sm" data-testid="pwa-install-btn">Install</button>
+      <button id="pwa-dismiss-btn" class="btn-dismiss" data-testid="pwa-dismiss-btn" aria-label="Dismiss">✕</button>
+    </div>
+  </div>
+
   <script src="js/vendor/ts-fsrs.umd.js"></script>
   <script src="js/markdown.js"></script>
   <script src="js/fsrs.js"></script>
   <script src="js/better-fsrs.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/pwa.js"></script>
 </body>
 </html>

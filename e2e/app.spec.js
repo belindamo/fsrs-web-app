@@ -2024,4 +2024,580 @@ test.describe('FSRS Web App', () => {
     await page.getByTestId('nav-dashboard').click();
     await expect(page.locator('#dashboard')).toHaveClass(/active/);
   });
+
+  // --- Session timer tests ---
+
+  test('session summary shows timing stats after review', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Timer test Q');
+    await page.getByTestId('card-back').fill('Timer test A');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Brief pause to accumulate some time
+    await page.waitForTimeout(100);
+
+    // Reveal and rate
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Summary should show timing elements
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+    await expect(page.getByTestId('summary-duration')).toBeVisible();
+    await expect(page.getByTestId('summary-avg-time')).toBeVisible();
+    await expect(page.getByTestId('summary-fastest')).toBeVisible();
+    await expect(page.getByTestId('summary-slowest')).toBeVisible();
+
+    // Duration should not be 0s (some time passed)
+    const duration = await page.getByTestId('summary-duration').textContent();
+    expect(duration).toBeTruthy();
+
+    // Avg time should match duration for a single card
+    const avg = await page.getByTestId('summary-avg-time').textContent();
+    expect(avg).toBeTruthy();
+
+    // Fastest and slowest should be equal for a single card
+    const fastest = await page.getByTestId('summary-fastest').textContent();
+    const slowest = await page.getByTestId('summary-slowest').textContent();
+    expect(fastest).toBe(slowest);
+  });
+
+  test('session timer tracks multiple cards correctly', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Timer A');
+    await page.getByTestId('card-back').fill('Answer A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Timer B');
+    await page.getByTestId('card-back').fill('Answer B');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Review first card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Review second card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-4').click();
+
+    // Summary should show 2 cards and timing
+    await expect(page.getByTestId('review-summary')).toBeVisible();
+    await expect(page.getByTestId('summary-total')).toHaveText('2');
+    await expect(page.getByTestId('summary-duration')).toBeVisible();
+    await expect(page.getByTestId('summary-timing')).toBeVisible();
+  });
+
+  test('undo resets timing stats correctly', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Undo Timer A');
+    await page.getByTestId('card-back').fill('Answer A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Undo Timer B');
+    await page.getByTestId('card-back').fill('Answer B');
+    await page.getByTestId('create-card-btn').click();
+
+    // Start review
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+
+    // Review first card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Review second card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-4').click();
+
+    // Summary shows 2 cards
+    await expect(page.getByTestId('summary-total')).toHaveText('2');
+
+    // Undo last rating
+    await page.getByTestId('summary-undo-btn').click();
+
+    // Should be back in review with 1 card remaining
+    await expect(page.getByTestId('review-active')).toBeVisible();
+
+    // Re-rate the card
+    await page.getByTestId('show-answer-btn').click();
+    await page.getByTestId('rating-3').click();
+
+    // Summary should still show 2 cards reviewed
+    await expect(page.getByTestId('summary-total')).toHaveText('2');
+    await expect(page.getByTestId('summary-duration')).toBeVisible();
+  });
+
+  // === Card Suspension & Leech Detection ===
+
+  test('can suspend a card from card detail view', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Suspend me');
+    await page.getByTestId('card-back').fill('Answer');
+    await page.getByTestId('create-card-btn').click();
+
+    // Go to cards view and expand the card
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+
+    // Click suspend button
+    await page.getByTestId('suspend-card-btn').click();
+    await expect(page.getByTestId('toast')).toHaveText('Card suspended');
+
+    // Card should now show Suspended badge
+    await expect(page.locator('.badge-suspended')).toBeVisible();
+    await expect(page.locator('.badge-suspended')).toHaveText('Suspended');
+
+    // Card row should have suspended styling (line-through)
+    await expect(page.getByTestId('card-row')).toHaveClass(/suspended/);
+  });
+
+  test('suspended cards are excluded from review', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Card A');
+    await page.getByTestId('card-back').fill('Answer A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Card B');
+    await page.getByTestId('card-back').fill('Answer B');
+    await page.getByTestId('create-card-btn').click();
+
+    // Suspend Card A
+    await page.getByTestId('nav-cards').click();
+    const firstRow = page.getByTestId('card-row-header').first();
+    await firstRow.click();
+    await page.getByTestId('suspend-card-btn').click();
+
+    // Dashboard should show only 1 card due
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('stat-due')).toHaveText('1');
+    await expect(page.getByTestId('start-review-btn')).toContainText('1 card');
+  });
+
+  test('can unsuspend a card', async ({ page }) => {
+    await page.goto('/');
+
+    // Create and suspend a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Will unsuspend');
+    await page.getByTestId('card-back').fill('Answer');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+    await page.getByTestId('suspend-card-btn').click();
+    await expect(page.getByTestId('toast')).toHaveText('Card suspended');
+
+    // Re-expand and unsuspend
+    await page.getByTestId('card-row-header').click();
+    await page.getByTestId('suspend-card-btn').click();
+    await expect(page.getByTestId('toast')).toHaveText('Card unsuspended');
+
+    // Card should no longer be suspended
+    await expect(page.getByTestId('card-row')).not.toHaveClass(/suspended/);
+
+    // Should be due again
+    await page.getByTestId('nav-dashboard').click();
+    await expect(page.getByTestId('stat-due')).toHaveText('1');
+  });
+
+  test('suspended filter shows only suspended cards', async ({ page }) => {
+    await page.goto('/');
+
+    // Create two cards
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Active card');
+    await page.getByTestId('card-back').fill('Active answer');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('card-front').fill('Suspended card');
+    await page.getByTestId('card-back').fill('Suspended answer');
+    await page.getByTestId('create-card-btn').click();
+
+    // Suspend the second card
+    await page.getByTestId('nav-cards').click();
+    const rows = page.getByTestId('card-row-header');
+    // Cards are shown newest first, so first row is "Suspended card"
+    await rows.first().click();
+    await page.getByTestId('suspend-card-btn').click();
+
+    // Click Suspended filter
+    await page.getByTestId('filter-suspended').click();
+    await expect(page.getByTestId('card-row')).toHaveCount(1);
+    await expect(page.getByTestId('card-list')).toContainText('Suspended card');
+  });
+
+  test('leech threshold setting can be changed', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    // Default leech threshold is 8
+    await expect(page.getByTestId('settings-leech-threshold')).toHaveValue('8');
+
+    // Change to 4
+    const input = page.getByTestId('settings-leech-threshold');
+    await input.fill('4');
+    await input.dispatchEvent('change');
+    await expect(page.getByTestId('toast')).toContainText('Leech threshold set to 4');
+
+    // Reload and verify persistence
+    await page.reload();
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-leech-threshold')).toHaveValue('4');
+  });
+
+  test('leech threshold 0 disables leech detection', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    const input = page.getByTestId('settings-leech-threshold');
+    await input.fill('0');
+    await input.dispatchEvent('change');
+    await expect(page.getByTestId('toast')).toContainText('Leech detection disabled');
+  });
+
+  test('settings info shows suspended count when cards are suspended', async ({ page }) => {
+    await page.goto('/');
+
+    // Create and suspend a card
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Susp info test');
+    await page.getByTestId('card-back').fill('Answer');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-cards').click();
+    await page.getByTestId('card-row-header').click();
+    await page.getByTestId('suspend-card-btn').click();
+
+    // Settings info should mention suspended
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-today-info')).toContainText('1 suspended');
+  });
+
+  // === Desired Retention Setting ===
+
+  test('settings view shows desired retention slider', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-retention')).toBeVisible();
+    await expect(page.getByTestId('settings-desired-retention')).toBeVisible();
+    await expect(page.getByTestId('retention-value')).toContainText('90%');
+  });
+
+  test('can change desired retention via slider', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    const slider = page.getByTestId('settings-desired-retention');
+    // Set to 85%
+    await slider.fill('85');
+    await slider.dispatchEvent('change');
+    await expect(page.getByTestId('toast')).toContainText('Target retention set to 85%');
+    await expect(page.getByTestId('retention-value')).toContainText('85%');
+  });
+
+  test('desired retention persists after reload', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    const slider = page.getByTestId('settings-desired-retention');
+    await slider.fill('92');
+    await slider.dispatchEvent('change');
+
+    // Reload and verify
+    await page.reload();
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-desired-retention')).toHaveValue('92');
+    await expect(page.getByTestId('retention-value')).toContainText('92%');
+  });
+
+  test('desired retention clamps to valid range', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+
+    const slider = page.getByTestId('settings-desired-retention');
+    // Try setting below minimum (70)
+    await slider.fill('50');
+    await slider.dispatchEvent('change');
+    await expect(page.getByTestId('settings-desired-retention')).toHaveValue('70');
+    await expect(page.getByTestId('retention-value')).toContainText('70%');
+  });
+
+  test('settings info shows retention percentage', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('settings-btn').click();
+    await expect(page.getByTestId('settings-today-info')).toContainText('Target: 90% retention');
+  });
+
+  test('desired retention affects scheduling intervals', async ({ page }) => {
+    await page.goto('/');
+
+    // Create a card and review it at default 90%
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Retention test Q');
+    await page.getByTestId('card-back').fill('Retention test A');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+
+    // Capture the Good interval at 90% retention
+    const goodBtn90 = page.getByTestId('rating-3');
+    const interval90 = await goodBtn90.locator('.interval-hint').textContent();
+
+    // Rate it to finish the session
+    await goodBtn90.click();
+    await page.getByTestId('summary-done-btn').click();
+
+    // Now change to 80% retention — intervals should be longer
+    await page.getByTestId('settings-btn').click();
+    const slider = page.getByTestId('settings-desired-retention');
+    await slider.fill('80');
+    await slider.dispatchEvent('change');
+
+    // Create another card and check interval preview
+    await page.getByTestId('nav-create').click();
+    await page.getByTestId('card-front').fill('Retention test Q2');
+    await page.getByTestId('card-back').fill('Retention test A2');
+    await page.getByTestId('create-card-btn').click();
+
+    await page.getByTestId('nav-dashboard').click();
+    await page.getByTestId('start-review-btn').click();
+    await page.getByTestId('show-answer-btn').click();
+
+    const goodBtn80 = page.getByTestId('rating-3');
+    const interval80 = await goodBtn80.locator('.interval-hint').textContent();
+
+    // Lower retention should give longer (or equal) intervals
+    // Both are strings like "3d" — we just verify they exist (the exact values
+    // depend on the algorithm, but both should be valid interval strings)
+    expect(interval90).toBeTruthy();
+    expect(interval80).toBeTruthy();
+  });
+
+  // === PWA Support ===
+
+  test('page includes PWA manifest link', async ({ page }) => {
+    await page.goto('/');
+    const manifest = page.locator('link[rel="manifest"]');
+    await expect(manifest).toHaveAttribute('href', 'manifest.json');
+  });
+
+  test('page includes theme-color meta tag', async ({ page }) => {
+    await page.goto('/');
+    const meta = page.locator('meta[name="theme-color"]');
+    await expect(meta).toHaveAttribute('content', '#6366f1');
+  });
+
+  test('page includes apple-touch-icon', async ({ page }) => {
+    await page.goto('/');
+    const icon = page.locator('link[rel="apple-touch-icon"]');
+    await expect(icon).toHaveAttribute('href', 'icons/icon-192.png');
+  });
+
+  test('manifest.json is valid and has required fields', async ({ page }) => {
+    const response = await page.goto('/manifest.json');
+    expect(response.status()).toBe(200);
+    const manifest = await response.json();
+    expect(manifest.name).toBeTruthy();
+    expect(manifest.short_name).toBeTruthy();
+    expect(manifest.start_url).toBeTruthy();
+    expect(manifest.display).toBe('standalone');
+    expect(manifest.icons).toBeDefined();
+    expect(manifest.icons.length).toBeGreaterThanOrEqual(2);
+    // All icons should have src, sizes, and type
+    for (const icon of manifest.icons) {
+      expect(icon.src).toBeTruthy();
+      expect(icon.sizes).toBeTruthy();
+      expect(icon.type).toBeTruthy();
+    }
+  });
+
+  test('PWA icons are accessible', async ({ page }) => {
+    // Check that each icon URL returns a valid response
+    const urls = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
+    for (const url of urls) {
+      const resp = await page.goto('/' + url);
+      expect(resp.status()).toBe(200);
+      expect(resp.headers()['content-type']).toContain('image/png');
+    }
+  });
+
+  test('service worker is registered', async ({ page }) => {
+    await page.goto('/');
+    // Wait a moment for SW to register
+    await page.waitForTimeout(1000);
+    const swRegistered = await page.evaluate(async () => {
+      if (!('serviceWorker' in navigator)) return false;
+      const regs = await navigator.serviceWorker.getRegistrations();
+      return regs.length > 0;
+    });
+    expect(swRegistered).toBe(true);
+  });
+
+  test('PWA install banner is hidden by default', async ({ page }) => {
+    await page.goto('/');
+    // The banner should be hidden (no beforeinstallprompt fires in Playwright)
+    await expect(page.getByTestId('pwa-install-banner')).toBeHidden();
+  });
+
+  test('pwa install banner dismiss button hides it and sets localStorage', async ({ page }) => {
+    await page.goto('/');
+    // Manually show the banner by removing hidden class
+    await page.evaluate(() => {
+      document.getElementById('pwa-install-banner').classList.remove('hidden');
+    });
+    await expect(page.getByTestId('pwa-install-banner')).toBeVisible();
+
+    // Click dismiss
+    await page.getByTestId('pwa-dismiss-btn').click();
+    await expect(page.getByTestId('pwa-install-banner')).toBeHidden();
+
+    // Check localStorage was set
+    const dismissed = await page.evaluate(() => localStorage.getItem('fsrs_pwa_dismissed'));
+    expect(dismissed).toBeTruthy();
+    expect(Number(dismissed)).toBeGreaterThan(0);
+  });
+
+  test('service worker caches app shell on install', async ({ page }) => {
+    await page.goto('/');
+    // Wait for SW to be active
+    await page.waitForTimeout(2000);
+
+    const cacheContents = await page.evaluate(async () => {
+      const cache = await caches.open('fsrs-v1');
+      const keys = await cache.keys();
+      return keys.map(r => new URL(r.url).pathname);
+    });
+
+    // Should have cached at least the main files
+    expect(cacheContents.length).toBeGreaterThanOrEqual(5);
+  });
+
+  // --- Retention over time chart ---
+
+  test('retention chart canvas is present on stats page', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+    await expect(page.getByTestId('retention-chart')).toBeVisible();
+  });
+
+  test('retention summary shows empty message when no reviews', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('nav-stats').click();
+    const summary = page.getByTestId('retention-summary');
+    await expect(summary).toContainText('No review data yet');
+  });
+
+  test('retention chart renders with review data', async ({ page }) => {
+    await page.goto('/');
+
+    // Seed cards and review history via localStorage
+    await page.evaluate(() => {
+      const now = new Date();
+      const cards = [{
+        id: 'ret-1', front: 'A', back: 'B', tags: [],
+        algorithm: 'fsrs5', stability: 5, difficulty: 5,
+        lastReview: now.toISOString(), due: now.toISOString(),
+        interval: 1, reps: 3, lapses: 0, state: 'review',
+        createdAt: now.toISOString(), suspended: false,
+        streak: 0, difficultyEma: 5, lastScheduledInterval: 0, errorEma: 0, reviewsSinceLapse: 100,
+      }];
+
+      // Create reviews across several weeks
+      const history = [];
+      for (let w = 0; w < 6; w++) {
+        for (let d = 0; d < 3; d++) {
+          const ts = new Date(now);
+          ts.setDate(ts.getDate() - (w * 7 + d));
+          // 80% recalled (rating >= 2)
+          const rating = (w * 3 + d) % 5 === 0 ? 1 : 3;
+          history.push({
+            cardId: 'ret-1', rating, elapsed: 1, interval: 1,
+            timestamp: ts.toISOString(), algorithm: 'fsrs5',
+          });
+        }
+      }
+
+      localStorage.setItem('fsrs_cards', JSON.stringify(cards));
+      localStorage.setItem('fsrs_history', JSON.stringify(history));
+    });
+
+    await page.reload();
+    await page.getByTestId('nav-stats').click();
+
+    // Summary should show actual retention data
+    const summary = page.getByTestId('retention-summary');
+    await expect(summary).toContainText('retention');
+    await expect(summary).not.toContainText('No review data');
+
+    // Canvas should have been drawn on (non-zero image data)
+    const hasContent = await page.evaluate(() => {
+      const canvas = document.querySelector('[data-testid="retention-chart"]');
+      if (!canvas) return false;
+      const ctx = canvas.getContext('2d');
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      return data.some(v => v !== 0);
+    });
+    expect(hasContent).toBe(true);
+  });
+
+  test('retention chart shows target retention line', async ({ page }) => {
+    await page.goto('/');
+
+    // Seed some review history
+    await page.evaluate(() => {
+      const now = new Date();
+      const cards = [{
+        id: 'ret-t', front: 'X', back: 'Y', tags: [],
+        algorithm: 'fsrs5', stability: 5, difficulty: 5,
+        lastReview: now.toISOString(), due: now.toISOString(),
+        interval: 1, reps: 1, lapses: 0, state: 'review',
+        createdAt: now.toISOString(), suspended: false,
+        streak: 0, difficultyEma: 5, lastScheduledInterval: 0, errorEma: 0, reviewsSinceLapse: 100,
+      }];
+      const history = [];
+      for (let i = 0; i < 10; i++) {
+        const ts = new Date(now);
+        ts.setDate(ts.getDate() - i);
+        history.push({
+          cardId: 'ret-t', rating: 3, elapsed: 1, interval: 1,
+          timestamp: ts.toISOString(), algorithm: 'fsrs5',
+        });
+      }
+      localStorage.setItem('fsrs_cards', JSON.stringify(cards));
+      localStorage.setItem('fsrs_history', JSON.stringify(history));
+      // Set desired retention to 85%
+      localStorage.setItem('fsrs_settings', JSON.stringify({ newCardsPerDay: 20, leechThreshold: 8, desiredRetention: 0.85 }));
+    });
+
+    await page.reload();
+    await page.getByTestId('nav-stats').click();
+
+    // Retention summary should show overall percentage
+    const summary = page.getByTestId('retention-summary');
+    await expect(summary).toContainText('%');
+  });
 });

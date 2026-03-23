@@ -13,10 +13,30 @@ const FSRS = (() => {
     console.error('ts-fsrs UMD not loaded — make sure ts-fsrs.umd.js is included before fsrs.js');
   }
 
-  // Create scheduler with short-term learning disabled (cards go straight to Review state)
-  const scheduler = lib.fsrs(lib.generatorParameters({
+  // Create schedulers — one at default 0.9 retention, recreated when desired retention changes
+  let _desiredRetention = 0.9;
+  let scheduler = lib.fsrs(lib.generatorParameters({
     enable_short_term: false,
+    request_retention: _desiredRetention,
   }));
+
+  /**
+   * Update the desired retention used for scheduling.
+   * Recreates the internal scheduler with the new target.
+   */
+  function setDesiredRetention(r) {
+    r = Math.max(0.7, Math.min(0.97, r));
+    if (r === _desiredRetention) return;
+    _desiredRetention = r;
+    scheduler = lib.fsrs(lib.generatorParameters({
+      enable_short_term: false,
+      request_retention: r,
+    }));
+  }
+
+  function getDesiredRetention() {
+    return _desiredRetention;
+  }
 
   const DECAY = -0.5;
   const FACTOR = 19 / 81; // (0.9^(1/DECAY) - 1)
@@ -120,7 +140,7 @@ const FSRS = (() => {
     return preview;
   }
 
-  return { review, previewRatings, retrievability, nextInterval, _lib: lib, _scheduler: scheduler };
+  return { review, previewRatings, retrievability, nextInterval, setDesiredRetention, getDesiredRetention, _lib: lib, _scheduler: scheduler };
 })();
 
 if (typeof module !== 'undefined') module.exports = FSRS;

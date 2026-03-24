@@ -361,6 +361,25 @@ const App = (() => {
       }
     }
 
+    // Advance to next card
+    reviewQueue.shift();
+    showNextCard();
+  }
+
+  function undoLastRating() {
+    if (undoStack.length === 0) return;
+    const last = undoStack.pop();
+
+    // Restore the card to its pre-rating state
+    Storage.saveCard(last.cardSnapshot);
+
+    // Remove the last review from history
+    Storage.removeLastReview(last.cardSnapshot.id);
+
+    // Remove last session rating and card time
+    sessionRatings.pop();
+    cardTimes.pop();
+
     // Decrement counter if this was a new card
     if (last.wasNew) {
       Storage.decrementNewCardsToday();

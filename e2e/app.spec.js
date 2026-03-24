@@ -2209,8 +2209,8 @@ test.describe('FSRS Web App', () => {
     await page.getByTestId('suspend-card-btn').click();
     await expect(page.getByTestId('toast')).toHaveText('Card suspended');
 
-    // Re-expand and unsuspend
-    await page.getByTestId('card-row-header').click();
+    // Card stays expanded after suspend re-render, so just click unsuspend directly
+    await expect(page.getByTestId('suspend-card-btn')).toBeVisible();
     await page.getByTestId('suspend-card-btn').click();
     await expect(page.getByTestId('toast')).toHaveText('Card unsuspended');
 
@@ -2337,9 +2337,11 @@ test.describe('FSRS Web App', () => {
     await page.getByTestId('settings-btn').click();
 
     const slider = page.getByTestId('settings-desired-retention');
-    // Try setting below minimum (70)
-    await slider.fill('50');
-    await slider.dispatchEvent('change');
+    // Try setting below minimum (70) — use evaluate since fill() rejects out-of-range on range inputs
+    await slider.evaluate(el => {
+      el.value = 50;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await expect(page.getByTestId('settings-desired-retention')).toHaveValue('70');
     await expect(page.getByTestId('retention-value')).toContainText('70%');
   });
